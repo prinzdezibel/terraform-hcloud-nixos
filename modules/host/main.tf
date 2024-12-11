@@ -21,7 +21,7 @@ resource "random_string" "identity_file" {
 
 resource "hcloud_server" "server" {
   name               = local.name
-  image              = var.microos_snapshot_id
+  image              = var.snapshot_id
   server_type        = var.server_type
   location           = var.location
   ssh_keys           = var.ssh_keys
@@ -60,12 +60,12 @@ resource "hcloud_server" "server" {
     EOT
   }
 
-  # Wait for MicroOS to reboot and be ready.
+  # Wait for hcloud server to reboot and be ready.
   provisioner "local-exec" {
     command = <<-EOT
       until ssh ${local.ssh_args} -i /tmp/${random_string.identity_file.id} -o ConnectTimeout=2 -p ${var.ssh_port} root@${self.ipv4_address} true 2> /dev/null
       do
-        echo "Waiting for MicroOS to become available..."
+        echo "Waiting for hcloud server to become available..."
         sleep 3
       done
     EOT
@@ -80,16 +80,16 @@ resource "hcloud_server" "server" {
 
 
   provisioner "remote-exec" {
-    inline = var.automatically_upgrade_os ? [
+    inline = var.hcloud_server_os == "MicroOS" ? (var.automatically_upgrade_os ? [
       <<-EOT
-      echo "Automatic OS updates are enabled"
+      echo "Automatic MicroOS updates are enabled"
       EOT
       ] : [
       <<-EOT
-      echo "Automatic OS updates are disabled"
+      echo "Automatic MicroOS updates are disabled"
       systemctl --now disable transactional-update.timer
       EOT
-    ]
+    ]) : []
   }
 
 }
@@ -149,6 +149,7 @@ data "cloudinit_config" "config" {
         cloudinit_write_files_common = var.cloudinit_write_files_common
         cloudinit_runcmd_common      = var.cloudinit_runcmd_common
         swap_size                    = var.swap_size
+        hcloud_server_os             = var.hcloud_server_os
       }
     )
   }

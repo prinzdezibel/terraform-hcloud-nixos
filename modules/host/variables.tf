@@ -2,8 +2,14 @@ variable "name" {
   description = "Host name"
   type        = string
 }
-variable "microos_snapshot_id" {
-  description = "MicroOS snapshot ID to be used. Per default empty, an initial snapshot will be created"
+
+variable "hcloud_server_os" {
+  description = "Immutable operating system for nodes."
+  type        = string
+}
+
+variable "snapshot_id" {
+  description = "Hetzner snapshot ID to be used. Per default empty, an initial snapshot will be created"
   type        = string
   default     = ""
 }
@@ -115,6 +121,11 @@ variable "cloudinit_write_files_common" {
 }
 
 variable "cloudinit_runcmd_common" {
+  default = ""
+  type    = string
+}
+
+variable "cloudinit_runcmd_microos" {
   default = ""
   type    = string
 }

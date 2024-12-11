@@ -111,8 +111,8 @@ data "cloudinit_config" "autoscaler_config" {
           selinux       = true
         })
         install_k3s_agent_script     = join("\n", concat(local.install_k3s_agent, ["systemctl start k3s-agent"]))
-        cloudinit_write_files_common = local.cloudinit_write_files_common
-        cloudinit_runcmd_common      = local.cloudinit_runcmd_common
+        cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.cloudinit_write_files_microos : local.cloudinit_write_files_nixos
+        cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.cloudinit_runcmd_microos : local.cloudinit_runcmd_nixos
       }
     )
   }
@@ -143,8 +143,8 @@ data "cloudinit_config" "autoscaler_legacy_config" {
           selinux       = true
         })
         install_k3s_agent_script     = join("\n", concat(local.install_k3s_agent, ["systemctl start k3s-agent"]))
-        cloudinit_write_files_common = local.cloudinit_write_files_common
-        cloudinit_runcmd_common      = local.cloudinit_runcmd_common
+        cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.cloudinit_write_files_microos : local.cloudinit_write_files_nixos
+        cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.cloudinit_runcmd_microos : local.cloudinit_runcmd_nixos
       }
     )
   }

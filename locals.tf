@@ -827,7 +827,7 @@ else
 fi
 EOF
 
-cloudinit_write_files_common = <<EOT
+cloudinit_write_files_microos = <<EOT
 # Script to rename the private interface to eth1 and unify NetworkManager connection naming
 - path: /etc/cloud/rename_interface.sh
   content: |
@@ -835,7 +835,7 @@ cloudinit_write_files_common = <<EOT
     set -euo pipefail
 
     sleep 11
-
+    
     INTERFACE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
     MAC=$(cat /sys/class/net/$INTERFACE/address)
 
@@ -851,7 +851,7 @@ cloudinit_write_files_common = <<EOT
     nmcli connection modify "$eth0_connection" \
       con-name eth0 \
       connection.interface-name eth0
-
+  
     eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1)
     nmcli connection modify "$eth1_connection" \
       con-name eth1 \
@@ -992,7 +992,117 @@ cloudinit_write_files_common = <<EOT
 %{endif}
 EOT
 
-cloudinit_runcmd_common = <<EOT
+cloudinit_write_files_nixos = <<EOT
+
+# Script to rename the private interface to eth1 and unify NetworkManager connection naming
+- path: /tmp/create_udev_nix_module.sh
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+
+    sleep 11
+    
+    INTERFACE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
+    MAC=$(cat /sys/class/net/$INTERFACE/address)
+    
+    cat <<EOF > /etc/nixos/modules/udev.nix
+    {...}:{
+        services.udev.extraRules = ''
+          SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC", NAME="eth1"
+        '';
+    }
+    EOF
+  permissions: "0744"
+
+- path: /etc/nixos/modules/routes.nix
+  content: |
+    {...}:{
+      # Make sure the network is up
+      #- [systemctl, restart, NetworkManager]
+      #- [systemctl, status, NetworkManager]
+      #- [ip, route, add, default, via, '172.31.1.1', dev, 'eth0']
+
+      # networking.interfaces.eth0.ipv4.routes = [{
+      #   address = "172.31.1.1";
+      # }]
+    }
+
+- path: /etc/nixos/modules/sshd_config.nix
+  content: |
+    {...}:{
+        services.openssh = {
+          enable = true;
+          ports = [ ${var.ssh_port} ];
+          settings = {
+            X11Forwarding = false;      
+            PasswordAuthentication = false;
+          };
+          extraConfig = ''
+            MaxAuthTries ${var.ssh_max_auth_tries}
+            AllowTcpForwarding no
+            AllowAgentForwarding no
+            AuthorizedKeysFile .ssh/authorized_keys
+          '';
+        };
+    }
+
+- path: /etc/nixos/modules/journald.nix
+  content: |
+    {...}:{
+      # Bounds the amount of logs that can survive on the system
+      services.journald = {
+          extraConfig = ''
+            SystemMaxUse=3G
+            MaxRetentionSec=1week
+          '';
+      };
+    }  
+
+## Set reboot method as "kured"
+#- content: |
+#    REBOOT_METHOD=kured
+#  path: /etc/transactional-update.conf
+#
+## Create Rancher repo config
+#- content: |
+#    [rancher-k3s-common-stable]
+#    name=Rancher K3s Common (stable)
+#    baseurl=https://rpm.rancher.io/k3s/stable/common/microos/noarch
+#    enabled=1
+#    gpgcheck=1
+#    repo_gpgcheck=0
+#    gpgkey=https://rpm.rancher.io/public.key
+#  path: /etc/zypp/repos.d/rancher-k3s-common.repo
+#
+#
+## Create the k3s registries file if needed
+#%{if var.k3s_registries != ""}
+## Create k3s registries file
+#- content: ${base64encode(var.k3s_registries)}
+#  encoding: base64
+#  path: /etc/rancher/k3s/registries.yaml
+#%{endif}
+#
+## Apply new DNS config
+# https://github.com/NixOS/nixpkgs/issues/65925
+#%{if length(var.dns_servers) > 0}
+## Set prepare for manual dns config
+#- content: |
+#    [main]
+#    dns=none
+#  path: /etc/NetworkManager/conf.d/dns.conf
+#
+#- content: |
+#    %{for server in var.dns_servers~}
+#    nameserver ${server}
+#    %{endfor}
+#  path: /etc/resolv.conf
+#  permissions: '0644'
+#%{endif}
+EOT
+
+
+cloudinit_runcmd_microos = <<EOT
 # ensure that /var uses full available disk size, thanks to btrfs this is easy
 - [btrfs, 'filesystem', 'resize', 'max', '/var']
 
@@ -1038,5 +1148,34 @@ cloudinit_runcmd_common = <<EOT
 
 # Cleanup some logs
 - [truncate, '-s', '0', '/var/log/audit/audit.log']
+EOT
+
+cloudinit_runcmd_nixos = <<EOT
+
+# Disable rebootmgr service as we use kured instead
+#- [systemctl, disable, '--now', 'rebootmgr.service']
+
+#%{if length(var.dns_servers) > 0}
+## Set the dns manually
+#- [systemctl, 'reload', 'NetworkManager']
+#%{endif}
+
+# Reduces the default number of snapshots from 2-10 number limit, to 4 and from 4-10 number limit important, to 2
+#- [sed, '-i', 's/NUMBER_LIMIT="2-10"/NUMBER_LIMIT="4"/g', /etc/snapper/configs/root]
+#- [sed, '-i', 's/NUMBER_LIMIT_IMPORTANT="4-10"/NUMBER_LIMIT_IMPORTANT="3"/g', /etc/snapper/configs/root]
+
+# Cleanup some logs
+#- [truncate, '-s', '0', '/var/log/audit/audit.log']
+
+
+#- [chmod, '+x', '/etc/cloud/rename_interface.sh']
+#- [chmod, '+x', '/tmp/create_udev_nix_module.sh']
+
+- [bash, '/tmp/create_udev_nix_module.sh']
+
+- [nixos-rebuild, 'switch', '-I', 'nixos-config=/etc/nixos/configuration.nix']
+      
+- [bash, '-c', 'eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0); nmcli connection modify "$eth0_connection" con-name eth0 connection.interface-name eth0' ]
+- [bash, '-c', 'eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1); nmcli connection modify "$eth1_connection" con-name eth1 connection.interface-name eth1' ]
 EOT
 }

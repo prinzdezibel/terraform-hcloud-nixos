@@ -34,6 +34,12 @@ variable "ssh_port" {
   }
 }
 
+variable "hcloud_server_os" {
+  description = "Immutable operating system for nodes."
+  type        = string
+  default     = "MicroOS"
+}
+
 variable "ssh_public_key" {
   description = "SSH public Key."
   type        = string
@@ -260,11 +266,11 @@ variable "agent_nodepools" {
     error_message = "The key for each individual node in a nodepool must be a stable integer in the range [0, 153] cast as a string."
   }
 
-  validation {
-    condition = sum([for agent_nodepool in var.agent_nodepools : length(coalesce(agent_nodepool.nodes, {})) + coalesce(agent_nodepool.count, 0)]) <= 100
-    # 154 because the private ip is derived from tonumber(key) + 101. See private_ipv4 in agents.tf
-    error_message = "Hetzner does not support networks with more than 100 servers."
-  }
+  #validation {
+  #  condition = sum([for agent_nodepool in var.agent_nodepools : length(coalesce(agent_nodepool.nodes, {})) + coalesce(agent_nodepool.count, 0)]) <= 100
+  #  # 154 because the private ip is derived from tonumber(key) + 101. See private_ipv4 in agents.tf
+  #  error_message = "Hetzner does not support networks with more than 100 servers."
+  #}
 
 }
 
@@ -337,18 +343,30 @@ variable "autoscaler_nodepools" {
     })), [])
   }))
   default = []
+  validation {
+    condition     = !(var.hcloud_server_os == "NixOS" && var.autoscaler_nodepools != [])
+    error_message = "Autoscaling is not supported for NixOS (hcloud_server_os = 'NixOS')."
+  }
 }
 
 variable "autoscaler_labels" {
   description = "Labels for nodes created by the Cluster Autoscaler."
   type        = list(string)
   default     = []
+  validation {
+    condition     = !(var.hcloud_server_os == "NixOS" && var.autoscaler_labels != [])
+    error_message = "Autoscaling is not supported for NixOS (hcloud_server_os = 'NixOS')."
+  }
 }
 
 variable "autoscaler_taints" {
   description = "Taints for nodes created by the Cluster Autoscaler."
   type        = list(string)
   default     = []
+    validation {
+    condition     = !(var.hcloud_server_os == "NixOS" && var.autoscaler_taints != [])
+    error_message = "Autoscaling is not supported for NixOS (hcloud_server_os = 'NixOS')."
+  }
 }
 
 variable "hetzner_ccm_version" {
@@ -573,12 +591,20 @@ variable "automatically_upgrade_k3s" {
   type        = bool
   default     = true
   description = "Whether to automatically upgrade k3s based on the selected channel."
+  validation {
+    condition     = !(var.hcloud_server_os == "NixOS" && var.automatically_upgrade_k3s == true)
+    error_message = "automatically_upgrade_k3s = true is not supported for NixOS (hcloud_server_os = 'NixOS')."
+  }
 }
 
 variable "automatically_upgrade_os" {
   type        = bool
   default     = true
   description = "Whether to enable or disable automatic os updates. Defaults to true. Should be disabled for single-node clusters"
+  validation {
+    condition     = !(var.hcloud_server_os == "NixOS" && var.automatically_upgrade_os == true)
+    error_message = "automatically_upgrade_os = true is not supported for NixOS (hcloud_server_os = 'NixOS')."
+  }
 }
 
 variable "extra_firewall_rules" {
@@ -835,6 +861,10 @@ variable "enable_rancher" {
   type        = bool
   default     = false
   description = "Enable rancher."
+  validation {
+    condition     = !(var.hcloud_server_os == "NixOS" && var.enable_rancher == true)
+    error_message = "Rancher is untested with NixOS (hcloud_server_os = 'NixOS')."
+  }
 }
 
 variable "rancher_version" {

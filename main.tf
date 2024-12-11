@@ -3,6 +3,18 @@ resource "random_password" "k3s_token" {
   special = false
 }
 
+data "hcloud_image" "nixos_x86_snapshot" {
+  with_selector     = "nixos-snapshot=yes"
+  with_architecture = "x86"
+  most_recent       = true
+}
+
+data "hcloud_image" "nixos_arm_snapshot" {
+  with_selector     = "nixos-snapshot=yes"
+  with_architecture = "arm"
+  most_recent       = true
+}
+
 data "hcloud_image" "microos_x86_snapshot" {
   with_selector     = "microos-snapshot=yes"
   with_architecture = "x86"

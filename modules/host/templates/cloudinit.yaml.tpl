@@ -12,9 +12,16 @@ ssh_authorized_keys:
   - ${key}
 %{ endfor ~}
 
+%{if hcloud_server_os == "MicroOS"~}
 # Resize /var, not /, as that's the last partition in MicroOS image.
 growpart:
     devices: ["/var"]
+%{endif~}
+%{if hcloud_server_os == "NixOS"~}
+# Resize / to max available space on disk
+growpart:
+    devices: ["/"]
+%{endif~}
 
 # Make sure the hostname is set correctly
 hostname: ${hostname}
@@ -24,6 +31,7 @@ runcmd:
 
 ${cloudinit_runcmd_common}
 
+%{if hcloud_server_os == "MicroOS"~}
 %{if swap_size != ""~}
 - |
   btrfs subvolume create /var/lib/swap
@@ -49,4 +57,5 @@ ${cloudinit_runcmd_common}
   EOF
   systemctl daemon-reload
   systemctl enable swapon-late.service
+%{endif~}
 %{endif~}
