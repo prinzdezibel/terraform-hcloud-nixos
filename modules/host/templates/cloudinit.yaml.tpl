@@ -1,7 +1,5 @@
 #cloud-config
 
-debug: True
-
 write_files:
 
 ${cloudinit_write_files_common}
@@ -31,8 +29,7 @@ runcmd:
 
 ${cloudinit_runcmd_common}
 
-%{if hcloud_server_os == "MicroOS"~}
-%{if swap_size != ""~}
+%{if hcloud_server_os == "MicroOS" && swap_size != ""~}
 - |
   btrfs subvolume create /var/lib/swap
   chmod 700 /var/lib/swap
@@ -57,5 +54,4 @@ ${cloudinit_runcmd_common}
   EOF
   systemctl daemon-reload
   systemctl enable swapon-late.service
-%{endif~}
 %{endif~}

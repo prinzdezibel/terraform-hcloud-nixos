@@ -74,27 +74,39 @@ resource "hcloud_server" "server" {
   # Cleanup ssh identity file
   provisioner "local-exec" {
     command = <<-EOT
-      rm /tmp/${random_string.identity_file.id}
+      rm /tmp/${random_string.identity_file.id} 
     EOT
-  }
-
-
-  provisioner "remote-exec" {
-    inline = var.hcloud_server_os == "MicroOS" ? (var.automatically_upgrade_os ? [
-      <<-EOT
-      echo "Automatic MicroOS updates are enabled"
-      EOT
-      ] : [
-      <<-EOT
-      echo "Automatic MicroOS updates are disabled"
-      systemctl --now disable transactional-update.timer
-      EOT
-    ]) : []
   }
 
 }
 
+resource "null_resource" "automatic_updates" {
+  count = var.hcloud_server_os == "MicroOS" ? 1 : 0
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = hcloud_server.server.ipv4_address
+    port           = var.ssh_port
+  }
+  provisioner "remote-exec" {
+    inline = var.automatically_upgrade_os ? [
+      <<-EOT
+      echo "Automatic OS updates are enabled"
+      EOT
+      ] : [
+      <<-EOT
+      echo "Automatic OS updates are disabled"
+      systemctl --now disable transactional-update.timer
+      EOT
+    ]
+  }
+  depends_on = [hcloud_server.server]
+}
+
 resource "null_resource" "registries" {
+  count = var.hcloud_server_os == "MicroOS" ? 1 : 0
+
   triggers = {
     registries = var.k3s_registries
   }
@@ -156,6 +168,7 @@ data "cloudinit_config" "config" {
 }
 
 resource "null_resource" "zram" {
+  count = var.hcloud_server_os == "MicroOS" ? 1 : 0
   triggers = {
     zram_size = var.zram_size
   }

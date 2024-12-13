@@ -1000,15 +1000,19 @@ cloudinit_write_files_nixos = <<EOT
     #!/bin/bash
     set -euo pipefail
 
-    sleep 11
+    sleep 5
     
-    INTERFACE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
-    MAC=$(cat /sys/class/net/$INTERFACE/address)
+    INTERFACE_PUBLIC=$(ip link show | awk '/^2:/{print $2}' | sed 's/://g')
+    MAC_PUBLIC=$(cat /sys/class/net/$INTERFACE_PUBLIC/address)
+
+    INTERFACE_PRIVATE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
+    MAC_PRIVATE=$(cat /sys/class/net/$INTERFACE_PRIVATE/address)
     
     cat <<EOF > /etc/nixos/modules/udev.nix
     {...}:{
         services.udev.extraRules = ''
-          SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC", NAME="eth1"
+          SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC_PUBLIC", NAME="eth0"
+          SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC_PRIVATE", NAME="eth1"
         '';
     }
     EOF
@@ -1099,6 +1103,7 @@ cloudinit_write_files_nixos = <<EOT
 #  path: /etc/resolv.conf
 #  permissions: '0644'
 #%{endif}
+
 EOT
 
 
@@ -1154,28 +1159,24 @@ cloudinit_runcmd_nixos = <<EOT
 
 # Disable rebootmgr service as we use kured instead
 #- [systemctl, disable, '--now', 'rebootmgr.service']
-
 #%{if length(var.dns_servers) > 0}
 ## Set the dns manually
 #- [systemctl, 'reload', 'NetworkManager']
 #%{endif}
-
 # Reduces the default number of snapshots from 2-10 number limit, to 4 and from 4-10 number limit important, to 2
 #- [sed, '-i', 's/NUMBER_LIMIT="2-10"/NUMBER_LIMIT="4"/g', /etc/snapper/configs/root]
 #- [sed, '-i', 's/NUMBER_LIMIT_IMPORTANT="4-10"/NUMBER_LIMIT_IMPORTANT="3"/g', /etc/snapper/configs/root]
-
 # Cleanup some logs
 #- [truncate, '-s', '0', '/var/log/audit/audit.log']
-
-
 #- [chmod, '+x', '/etc/cloud/rename_interface.sh']
 #- [chmod, '+x', '/tmp/create_udev_nix_module.sh']
 
 - [bash, '/tmp/create_udev_nix_module.sh']
-
 - [nixos-rebuild, 'switch', '-I', 'nixos-config=/etc/nixos/configuration.nix']
-      
-- [bash, '-c', 'eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0); nmcli connection modify "$eth0_connection" con-name eth0 connection.interface-name eth0' ]
-- [bash, '-c', 'eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1); nmcli connection modify "$eth1_connection" con-name eth1 connection.interface-name eth1' ]
+
+# - [bash, '-c', 'eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0); nmcli connection modify "$eth0_connection" con-name eth0 connection.interface-name eth0' ]
+# - [bash, '-c', 'eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1); nmcli connection modify "$eth1_connection" con-name eth1 connection.interface-name eth1' ]
+
 EOT
+
 }

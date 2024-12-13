@@ -38,6 +38,10 @@ variable "hcloud_server_os" {
   description = "Immutable operating system for nodes."
   type        = string
   default     = "MicroOS"
+  validation {
+    condition     = contains(["MicroOS", "NixOS"], var.hcloud_server_os)
+    error_message = "Allowed values for hcloud_server_os are \"MicroOS\" or \"NixOS\"."
+  }
 }
 
 variable "ssh_public_key" {
@@ -344,7 +348,7 @@ variable "autoscaler_nodepools" {
   }))
   default = []
   validation {
-    condition     = !(var.hcloud_server_os == "NixOS" && var.autoscaler_nodepools != [])
+    condition     = !(var.hcloud_server_os == "NixOS" && length(var.autoscaler_nodepools) != 0)
     error_message = "Autoscaling is not supported for NixOS (hcloud_server_os = 'NixOS')."
   }
 }
@@ -354,7 +358,7 @@ variable "autoscaler_labels" {
   type        = list(string)
   default     = []
   validation {
-    condition     = !(var.hcloud_server_os == "NixOS" && var.autoscaler_labels != [])
+    condition     = !(var.hcloud_server_os == "NixOS" && length(var.autoscaler_labels) != 0)
     error_message = "Autoscaling is not supported for NixOS (hcloud_server_os = 'NixOS')."
   }
 }
@@ -364,7 +368,7 @@ variable "autoscaler_taints" {
   type        = list(string)
   default     = []
     validation {
-    condition     = !(var.hcloud_server_os == "NixOS" && var.autoscaler_taints != [])
+    condition     = !(var.hcloud_server_os == "NixOS" && length(var.autoscaler_taints) != 0)
     error_message = "Autoscaling is not supported for NixOS (hcloud_server_os = 'NixOS')."
   }
 }
@@ -1068,9 +1072,13 @@ variable "agent_nodes_custom_config" {
 }
 
 variable "k3s_registries" {
-  description = "K3S registries.yml contents. It used to access private docker registries."
+  description = "K3S registries.yml contents. It is used to access private docker registries."
   default     = " "
   type        = string
+  validation {
+    condition     =  !(var.k3s_registries != " " && var.hcloud_server_os == "NixOS")
+    error_message = "Private image repositories are not available for NixOS (hcloud_server_os = 'NixOS')"
+  }
 }
 
 variable "additional_tls_sans" {
@@ -1137,6 +1145,10 @@ variable "disable_selinux" {
   type        = bool
   default     = false
   description = "Disable SELinux on all nodes."
+  validation {
+    condition     =  !(var.disable_selinux == false && var.hcloud_server_os == "NixOS")
+    error_message = "NixOS does not support SELinux. Please set disable_selinux = true. (hcloud_server_os = 'NixOS')"
+  }
 }
 
 variable "enable_delete_protection" {

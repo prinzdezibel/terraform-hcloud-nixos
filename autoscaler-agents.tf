@@ -1,12 +1,12 @@
 locals {
   cluster_prefix = var.use_cluster_name_in_node_name ? "${var.cluster_name}-" : ""
   first_nodepool_snapshot_id = length(var.autoscaler_nodepools) == 0 ? "" : (
-    substr(var.autoscaler_nodepools[0].server_type, 0, 3) == "cax" ? data.hcloud_image.microos_arm_snapshot.id : data.hcloud_image.microos_x86_snapshot.id
+    substr(var.autoscaler_nodepools[0].server_type, 0, 3) == "cax" ? data.hcloud_image.microos_arm_snapshot[0].id : data.hcloud_image.microos_x86_snapshot[0].id
   )
 
-  imageList = {
-    arm64 : tostring(data.hcloud_image.microos_arm_snapshot.id)
-    amd64 : tostring(data.hcloud_image.microos_x86_snapshot.id)
+  imageList = length(var.autoscaler_nodepools) == 0 ? {} : {
+    arm64 : tostring(data.hcloud_image.microos_arm_snapshot[0].id)
+    amd64 : tostring(data.hcloud_image.microos_x86_snapshot[0].id)
   }
 
   nodeConfigName = var.use_cluster_name_in_node_name ? "${var.cluster_name}-" : ""

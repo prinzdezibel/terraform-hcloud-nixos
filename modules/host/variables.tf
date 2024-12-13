@@ -4,7 +4,7 @@ variable "name" {
 }
 
 variable "hcloud_server_os" {
-  description = "Immutable operating system for nodes."
+  description = "Specify immutable operating system used for nodes."
   type        = string
 }
 
@@ -138,6 +138,10 @@ variable "swap_size" {
     condition     = can(regex("^$|[1-9][0-9]{0,3}(G|M)$", var.swap_size))
     error_message = "Invalid swap size. Examples: 512M, 1G"
   }
+  validation {
+    condition     =  !(var.swap_size != "" && var.hcloud_server_os == "NixOS")
+    error_message = "NixOS does not support swap (hcloud_server_os = 'NixOS')"
+  }
 }
 
 variable "zram_size" {
@@ -147,6 +151,10 @@ variable "zram_size" {
   validation {
     condition     = can(regex("^$|[1-9][0-9]{0,3}(G|M)$", var.zram_size))
     error_message = "Invalid zram size. Examples: 512M, 1G"
+  }
+  validation {
+    condition     =  !(var.zram_size != "" && var.hcloud_server_os == "NixOS")
+    error_message = "NixOS does not support zram (hcloud_server_os = 'NixOS')"
   }
 }
 

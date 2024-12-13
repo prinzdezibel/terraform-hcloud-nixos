@@ -19,13 +19,13 @@ variable "hcloud_token_nixos" {
 # We download the OpenSUSE MicroOS x86 image from an automatically selected mirror.
 variable "nixos_x86_mirror_link" {
   type    = string
-  default = "http://95.117.30.10/nixos-x86_64-linux.qcow2.tar.gz"
+  default = "http://77.7.27.12/nixos-x86_64-linux.qcow2.tar.gz"
 }
 
 # We download the OpenSUSE MicroOS ARM image from an automatically selected mirror.
 variable "nixos_arm_mirror_link" {
   type    = string
-  default = "http://95.117.30.10/nixos-aarch64-linux.qcow2.tar.gz"
+  default = "http://77.7.27.12/nixos-aarch64-linux.qcow2.tar.gz"
 }
 
 # If you need to add other packages to the OS, do it here in the default value, like ["vim", "curl", "wget"]
@@ -64,15 +64,6 @@ locals {
     {
       environment.defaultPackages = with pkgs; [ k3s ] ++ [ ${join(" ", var.nix_packages_to_install)} ];
     }' > modules/default-packages.nix
-
-    #echo $'
-    #{
-    #  pkgs,
-    #  ...
-    #}:
-    #{
-    #  environment.systemPackages = with pkgs; [ k3s ];
-    #}' > modules/k3s.nix
     
     mv configuration.nix configuration.nix.bak
     mv modules/configuration.nix modules/configuration.nix.bak
@@ -90,19 +81,23 @@ locals {
     # For whatever reason the /boot filesystem is redundant and errors.
     # See also: https://github.com/NixOS/nixpkgs/issues/283889
     sed -zi 's/fileSystems."\/boot" =.*{.*}.*;//' hardware-configuration.nix
-               
+
     echo "Rebuild NixOs ..."
     nixos-rebuild boot -I nixos-config=/etc/nixos/configuration.nix --upgrade
 
-    echo "Cleaning-up..."
-    rm -rf /etc/ssh/ssh_host_*
+    echo "Cleaning-up..."    
     rm /root/.ssh/authorized_keys
+    rm -rf /etc/ssh/ssh_host_*
+    rm -rf /root/.cache/nix
+    nix-store --gc
+    nix-store --optimise
+
+    # Make snapshot size match the actual disk usage
+    fstrim -av
 
     echo "Done."
     sleep 1 && udevadm settle
-
 EOT
-
 }
 
 # Source for the MicroOS x86 snapshot
@@ -160,21 +155,21 @@ build {
 
 
 # Build the NixOS ARM snapshot
-build {
-  sources = ["source.hcloud.nixos-arm-snapshot"]
-
-  # Download the MicroOS ARM image
-  provisioner "shell" {
-    inline = ["${local.download_nixos_image}${var.nixos_arm_mirror_link}"]
-  }
-
-  provisioner "shell" {
-    inline            = [local.write_nixos_image]
-    expect_disconnect = true
-  }
-
-  provisioner "shell" {
-    pause_before      = "5s"
-    inline            = [local.install_grub]
-  }
-}
+#build {
+#  sources = ["source.hcloud.nixos-arm-snapshot"]
+#
+#  # Download the MicroOS ARM image
+#  provisioner "shell" {
+#    inline = ["${local.download_nixos_image}${var.nixos_arm_mirror_link}"]
+#  }
+#
+#  provisioner "shell" {
+#    inline            = [local.write_nixos_image]
+#    expect_disconnect = true
+#  }
+#
+#  provisioner "shell" {
+#    pause_before      = "5s"
+#    inline            = [local.install_grub]
+#  }
+#}
