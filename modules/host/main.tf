@@ -105,8 +105,7 @@ resource "null_resource" "automatic_updates" {
 }
 
 resource "null_resource" "registries" {
-  count = var.hcloud_server_os == "MicroOS" ? 1 : 0
-
+  
   triggers = {
     registries = var.k3s_registries
   }

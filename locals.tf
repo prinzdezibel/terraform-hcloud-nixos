@@ -88,24 +88,24 @@ locals {
       var.enable_rancher ? ["rancher.yaml"] : [],
       var.rancher_registration_manifest_url != "" ? [var.rancher_registration_manifest_url] : []
     ),
-    patches = [
-      {
-        target = {
-          group     = "apps"
-          version   = "v1"
-          kind      = "Deployment"
-          name      = "system-upgrade-controller"
-          namespace = "system-upgrade"
-        }
-        patch = file("${path.module}/kustomize/system-upgrade-controller.yaml")
-      },
-      {
-        path = "kured.yaml"
-      },
-      {
-        path = "ccm.yaml"
+    patches = concat(var.hcloud_server_os == "MicroOS" ? [{
+      target = {
+        group     = "apps"
+        version   = "v1"
+        kind      = "Deployment"
+        name      = "system-upgrade-controller"
+        namespace = "system-upgrade"
       }
-    ]
+      patch = file("${path.module}/kustomize/system-upgrade-controller.yaml")
+      }] : [],
+      [
+        {
+          path = "kured.yaml"
+        },
+        {
+          path = "ccm.yaml"
+        }
+    ])
   })
 
   apply_k3s_selinux = ["/sbin/semodule -v -i /usr/share/selinux/packages/k3s.pp"]
@@ -113,14 +113,62 @@ locals {
 
   k3s_install_command = "curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_START=true INSTALL_K3S_SKIP_SELINUX_RPM=true %{if var.install_k3s_version == ""}INSTALL_K3S_CHANNEL=${var.initial_k3s_channel}%{else}INSTALL_K3S_VERSION=${var.install_k3s_version}%{endif} INSTALL_K3S_EXEC='%s' sh -"
 
-  install_k3s_server = concat(
+  microos_install_k3s_server = concat(
     local.common_pre_install_k3s_commands,
     [format(local.k3s_install_command, "server ${var.k3s_exec_server_args}")],
     var.disable_selinux ? [] : local.apply_k3s_selinux,
     local.common_post_install_k3s_commands
   )
 
-  install_k3s_agent = concat(
+  microos_cloudinit_runcmd = <<EOT
+# ensure that /var uses full available disk size, thanks to btrfs this is easy
+- [btrfs, 'filesystem', 'resize', 'max', '/var']
+
+# SELinux permission for the SSH alternative port
+%{if var.ssh_port != 22}
+# SELinux permission for the SSH alternative port.
+- [semanage, port, '-a', '-t', ssh_port_t, '-p', tcp, '${var.ssh_port}']
+%{endif}
+
+# Create and apply the necessary SELinux module for kube-hetzner
+- [checkmodule, '-M', '-m', '-o', '/root/kube_hetzner_selinux.mod', '/root/kube_hetzner_selinux.te']
+- ['semodule_package', '-o', '/root/kube_hetzner_selinux.pp', '-m', '/root/kube_hetzner_selinux.mod']
+- [semodule, '-i', '/root/kube_hetzner_selinux.pp']
+- [setsebool, '-P', 'virt_use_samba', '1']
+- [setsebool, '-P', 'domain_kernel_load_modules', '1']
+
+# Disable rebootmgr service as we use kured instead
+- [systemctl, disable, '--now', 'rebootmgr.service']
+
+%{if length(var.dns_servers) > 0}
+# Set the dns manually
+- [systemctl, 'reload', 'NetworkManager']
+%{endif}
+
+# Bounds the amount of logs that can survive on the system
+- [sed, '-i', 's/#SystemMaxUse=/SystemMaxUse=3G/g', /etc/systemd/journald.conf]
+- [sed, '-i', 's/#MaxRetentionSec=/MaxRetentionSec=1week/g', /etc/systemd/journald.conf]
+
+# Reduces the default number of snapshots from 2-10 number limit, to 4 and from 4-10 number limit important, to 2
+- [sed, '-i', 's/NUMBER_LIMIT="2-10"/NUMBER_LIMIT="4"/g', /etc/snapper/configs/root]
+- [sed, '-i', 's/NUMBER_LIMIT_IMPORTANT="4-10"/NUMBER_LIMIT_IMPORTANT="3"/g', /etc/snapper/configs/root]
+
+# Allow network interface
+- [chmod, '+x', '/etc/cloud/rename_interface.sh']
+
+# Restart the sshd service to apply the new config
+- [systemctl, 'restart', 'sshd']
+
+# Make sure the network is up
+- [systemctl, restart, NetworkManager]
+- [systemctl, status, NetworkManager]
+- [ip, route, add, default, via, '172.31.1.1', dev, 'eth0']
+
+# Cleanup some logs
+- [truncate, '-s', '0', '/var/log/audit/audit.log']
+EOT
+
+  microos_install_k3s_agent = concat(
     local.common_pre_install_k3s_commands,
     [format(local.k3s_install_command, "agent ${var.k3s_exec_agent_args}")],
     var.disable_selinux ? [] : local.apply_k3s_selinux,
@@ -763,7 +811,7 @@ kured_options = merge({
   "reboot-sentinel" : "/sentinel/reboot-required"
 }, var.kured_options)
 
-k3s_registries_update_script = <<EOF
+microos_k3s_registries_update_script = <<EOF
 DATE=`date +%Y-%m-%d_%H-%M-%S`
 if cmp -s /tmp/registries.yaml /etc/rancher/k3s/registries.yaml; then
   echo "No update required to the registries.yaml file"
@@ -783,7 +831,7 @@ else
 fi
 EOF
 
-k3s_config_update_script = <<EOF
+microos_k3s_config_update_script = <<EOF
 DATE=`date +%Y-%m-%d_%H-%M-%S`
 if cmp -s /tmp/config.yaml /etc/rancher/k3s/config.yaml; then
   echo "No update required to the config.yaml file"
@@ -827,7 +875,7 @@ else
 fi
 EOF
 
-cloudinit_write_files_microos = <<EOT
+microos_cloudinit_write_files = <<EOT
 # Script to rename the private interface to eth1 and unify NetworkManager connection naming
 - path: /etc/cloud/rename_interface.sh
   content: |
@@ -992,22 +1040,52 @@ cloudinit_write_files_microos = <<EOT
 %{endif}
 EOT
 
-cloudinit_write_files_nixos = <<EOT
 
-# Script to rename the private interface to eth1 and unify NetworkManager connection naming
-- path: /tmp/create_udev_nix_module.sh
-  content: |
+# NIXOS
+
+nixos_install_k3s = concat(
+
+  # TODO:
+  # additional_k3s_environment = join("\n",
+  #  [
+  #    for var_name, var_value in var.additional_k3s_environment :
+  #    "${var_name}=\"${var_value}\""
+  #  ]
+  #)
+  #install_additional_k3s_environment = <<-EOT
+  #cat >> /etc/environment <<EOF
+  #${local.additional_k3s_environment}
+  #EOF
+  #set -a; source /etc/environment; set +a;
+  #EOT
+  #    local.install_system_alias,
+  #    local.install_kubectl_bash_completion,
+
+  # User-defined commands to execute just before installing k3s.
+  var.preinstall_exec,
+  [
+    <<-EOT
     #!/bin/bash
     set -euo pipefail
 
-    sleep 5
-    
     INTERFACE_PUBLIC=$(ip link show | awk '/^2:/{print $2}' | sed 's/://g')
     MAC_PUBLIC=$(cat /sys/class/net/$INTERFACE_PUBLIC/address)
 
     INTERFACE_PRIVATE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
     MAC_PRIVATE=$(cat /sys/class/net/$INTERFACE_PRIVATE/address)
-    
+
+    cat <<EOF > /etc/nixos/modules/k3s.extraFlags.nix
+      {...}:{
+        services.k3s.extraFlags = "$SERVER_ARGS";
+      }
+    EOF
+
+    cat <<EOF > /etc/nixos/modules/k3s.role.nix
+    {...}:{
+     services.k3s.role = "$ROLE";
+    }
+    EOF
+
     cat <<EOF > /etc/nixos/modules/udev.nix
     {...}:{
         services.udev.extraRules = ''
@@ -1016,7 +1094,133 @@ cloudinit_write_files_nixos = <<EOT
         '';
     }
     EOF
-  permissions: "0744"
+
+    nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
+
+    ip link set $INTERFACE_PUBLIC down
+    ip link set $INTERFACE_PUBLIC name eth0
+    ip link set eth0 up
+
+    ip link set $INTERFACE_PRIVATE down
+    ip link set $INTERFACE_PRIVATE name eth1
+    ip link set eth1 up
+
+    eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0)
+    nmcli connection modify "$eth0_connection" \
+      con-name eth0 \
+      connection.interface-name eth0
+
+    eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1)
+    nmcli connection modify "$eth1_connection" \
+      con-name eth1 \
+      connection.interface-name eth1
+
+    systemctl restart NetworkManager
+
+  EOT
+  ],
+  var.postinstall_exec,
+)
+
+nixos_install_k3s_server = concat(
+  ["export ROLE=server"],
+  ["export SERVER_ARGS=\"${var.k3s_exec_server_args}\""],
+  local.nixos_install_k3s
+)
+
+nixos_install_k3s_agent = concat(
+  ["export ROLE=agent"],
+  ["export SERVER_ARGS=\"${var.k3s_exec_agent_args}\""],
+  local.nixos_install_k3s
+)
+
+nixos_k3s_registries_update_script = <<-EOF
+  #!/bin/bash
+  set -euo pipefail
+
+  if [ -f /etc/rancher/k3s/registries.yaml ] && cmp -s /tmp/registries.yaml $(readlink -f /etc/rancher/k3s/registries.yaml); then
+    echo "No update required to the registries.yaml file"
+  else
+    echo "Updated registries.yaml detected, restart of k3s service required"
+
+    cat <<-EOT > /etc/nixos/modules/k3s-registries.nix
+      {...}:{
+          environment.etc."rancher/k3s/registries.yaml".text = ''$(cat /tmp/registries.yaml)'';
+      }
+EOT
+
+    nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
+
+    if [[ $? -ne 0 ]]; then
+      echo "Error: Failed to update registries.yaml. Roll back to old /etc/rancher/k3s/registries.yaml." && nixos-rebuild --rollback switch
+    else
+      echo "k3s service or k3s-agent service restarted successfully"
+    fi
+  fi
+EOF
+
+nixos_k3s_config_update_script = <<-EOF
+  #!/bin/bash
+  set -euo pipefail
+
+  if [ -f /etc/rancher/k3s/config.yaml ] && cmp -s /tmp/config.yaml $(readlink -f /etc/rancher/k3s/config.yaml); then
+    echo "No update required to the config.yaml file"
+  else
+    echo "Updated registries.yaml detected, restart of k3s service required"
+
+    cat <<EOT > /etc/nixos/modules/k3s-config.nix
+      {...}:{
+          environment.etc."rancher/k3s/config.yaml".text = ''$(cat /tmp/config.yaml)'';
+      }
+EOT
+
+    nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
+
+    if [[ $? -ne 0 ]]; then
+      echo "Error: Failed to update config.yaml. Roll back to old /etc/rancher/k3s/config.yaml." && nixos-rebuild --rollback switch
+    else
+      echo "k3s service or k3s-agent service restarted successfully"
+    fi
+  fi
+EOF
+
+nixos_cloudinit_runcmd = <<-EOT
+
+INTERFACE_PRIVATE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
+MAC_PRIVATE=$(cat /sys/class/net/$INTERFACE_PRIVATE/address)
+ip link set $INTERFACE_PRIVATE down
+ip link set $INTERFACE_PRIVATE name eth1
+ip link set eth1 up
+eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1)
+nmcli connection modify "$eth1_connection" \
+  con-name eth1 \
+  connection.interface-name eth1
+systemctl restart NetworkManager
+
+# Disable rebootmgr service as we use kured instead
+#- [systemctl, disable, '--now', 'rebootmgr.service']
+#%{if length(var.dns_servers) > 0}
+## Set the dns manually
+#- [systemctl, 'reload', 'NetworkManager']
+#%{endif}
+# Reduces the default number of snapshots from 2-10 number limit, to 4 and from 4-10 number limit important, to 2
+#- [sed, '-i', 's/NUMBER_LIMIT="2-10"/NUMBER_LIMIT="4"/g', /etc/snapper/configs/root]
+#- [sed, '-i', 's/NUMBER_LIMIT_IMPORTANT="4-10"/NUMBER_LIMIT_IMPORTANT="3"/g', /etc/snapper/configs/root]
+# Cleanup some logs
+#- [truncate, '-s', '0', '/var/log/audit/audit.log']
+#- [chmod, '+x', '/etc/cloud/rename_interface.sh']
+#- [chmod, '+x', '/tmp/create_udev_nix_module.sh']
+
+#- [bash, '/tmp/create_udev_nix_module.sh']
+
+#- [nixos-rebuild, 'switch', '-I', 'nixos-config=/etc/nixos/configuration.nix']
+
+# - [bash, '-c', 'eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0); nmcli connection modify "$eth0_connection" con-name eth0 connection.interface-name eth0' ]
+# - [bash, '-c', 'eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1); nmcli connection modify "$eth1_connection" con-name eth1 connection.interface-name eth1' ]
+
+EOT
+
+nixos_cloudinit_write_files = <<-EOT
 
 - path: /etc/nixos/modules/routes.nix
   content: |
@@ -1103,79 +1307,6 @@ cloudinit_write_files_nixos = <<EOT
 #  path: /etc/resolv.conf
 #  permissions: '0644'
 #%{endif}
-
-EOT
-
-
-cloudinit_runcmd_microos = <<EOT
-# ensure that /var uses full available disk size, thanks to btrfs this is easy
-- [btrfs, 'filesystem', 'resize', 'max', '/var']
-
-# SELinux permission for the SSH alternative port
-%{if var.ssh_port != 22}
-# SELinux permission for the SSH alternative port.
-- [semanage, port, '-a', '-t', ssh_port_t, '-p', tcp, '${var.ssh_port}']
-%{endif}
-
-# Create and apply the necessary SELinux module for kube-hetzner
-- [checkmodule, '-M', '-m', '-o', '/root/kube_hetzner_selinux.mod', '/root/kube_hetzner_selinux.te']
-- ['semodule_package', '-o', '/root/kube_hetzner_selinux.pp', '-m', '/root/kube_hetzner_selinux.mod']
-- [semodule, '-i', '/root/kube_hetzner_selinux.pp']
-- [setsebool, '-P', 'virt_use_samba', '1']
-- [setsebool, '-P', 'domain_kernel_load_modules', '1']
-
-# Disable rebootmgr service as we use kured instead
-- [systemctl, disable, '--now', 'rebootmgr.service']
-
-%{if length(var.dns_servers) > 0}
-# Set the dns manually
-- [systemctl, 'reload', 'NetworkManager']
-%{endif}
-
-# Bounds the amount of logs that can survive on the system
-- [sed, '-i', 's/#SystemMaxUse=/SystemMaxUse=3G/g', /etc/systemd/journald.conf]
-- [sed, '-i', 's/#MaxRetentionSec=/MaxRetentionSec=1week/g', /etc/systemd/journald.conf]
-
-# Reduces the default number of snapshots from 2-10 number limit, to 4 and from 4-10 number limit important, to 2
-- [sed, '-i', 's/NUMBER_LIMIT="2-10"/NUMBER_LIMIT="4"/g', /etc/snapper/configs/root]
-- [sed, '-i', 's/NUMBER_LIMIT_IMPORTANT="4-10"/NUMBER_LIMIT_IMPORTANT="3"/g', /etc/snapper/configs/root]
-
-# Allow network interface
-- [chmod, '+x', '/etc/cloud/rename_interface.sh']
-
-# Restart the sshd service to apply the new config
-- [systemctl, 'restart', 'sshd']
-
-# Make sure the network is up
-- [systemctl, restart, NetworkManager]
-- [systemctl, status, NetworkManager]
-- [ip, route, add, default, via, '172.31.1.1', dev, 'eth0']
-
-# Cleanup some logs
-- [truncate, '-s', '0', '/var/log/audit/audit.log']
-EOT
-
-cloudinit_runcmd_nixos = <<EOT
-
-# Disable rebootmgr service as we use kured instead
-#- [systemctl, disable, '--now', 'rebootmgr.service']
-#%{if length(var.dns_servers) > 0}
-## Set the dns manually
-#- [systemctl, 'reload', 'NetworkManager']
-#%{endif}
-# Reduces the default number of snapshots from 2-10 number limit, to 4 and from 4-10 number limit important, to 2
-#- [sed, '-i', 's/NUMBER_LIMIT="2-10"/NUMBER_LIMIT="4"/g', /etc/snapper/configs/root]
-#- [sed, '-i', 's/NUMBER_LIMIT_IMPORTANT="4-10"/NUMBER_LIMIT_IMPORTANT="3"/g', /etc/snapper/configs/root]
-# Cleanup some logs
-#- [truncate, '-s', '0', '/var/log/audit/audit.log']
-#- [chmod, '+x', '/etc/cloud/rename_interface.sh']
-#- [chmod, '+x', '/tmp/create_udev_nix_module.sh']
-
-- [bash, '/tmp/create_udev_nix_module.sh']
-- [nixos-rebuild, 'switch', '-I', 'nixos-config=/etc/nixos/configuration.nix']
-
-# - [bash, '-c', 'eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0); nmcli connection modify "$eth0_connection" con-name eth0 connection.interface-name eth0' ]
-# - [bash, '-c', 'eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1); nmcli connection modify "$eth1_connection" con-name eth1 connection.interface-name eth1' ]
 
 EOT
 

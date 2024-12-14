@@ -68,9 +68,21 @@ variable "ssh_additional_public_keys" {
 }
 
 variable "authentication_config" {
-  description = "Strucutred authentication configuration. This can be used to define external authentication providers."
+  description = "Structured authentication configuration. This can be used to define external authentication providers."
   type        = string
   default     = ""
+  validation {
+    condition     = !(var.hcloud_server_os == "NixOS" && var.authentication_config != "")
+    error_message = "authentication_config option is not supported for NixOS (hcloud_server_os = 'NixOS')."
+  }
+}
+
+variable "authentication_config_instances" {
+  description = "Structured authentication configuration. This can be used to define external authentication providers."
+  type = map(object({
+    type      = string
+  }))
+  default     = {}
 }
 
 variable "hcloud_ssh_key_id" {
@@ -1022,7 +1034,6 @@ variable "postinstall_exec" {
   description = "Additional to execute after the install calls, for example restoring a backup."
 }
 
-
 variable "extra_kustomize_deployment_commands" {
   type        = string
   default     = ""
@@ -1072,13 +1083,9 @@ variable "agent_nodes_custom_config" {
 }
 
 variable "k3s_registries" {
-  description = "K3S registries.yml contents. It is used to access private docker registries."
+  description = "K3S registries.yml contents. It is used to access (private) docker registries."
   default     = " "
   type        = string
-  validation {
-    condition     =  !(var.k3s_registries != " " && var.hcloud_server_os == "NixOS")
-    error_message = "Private image repositories are not available for NixOS (hcloud_server_os = 'NixOS')"
-  }
 }
 
 variable "additional_tls_sans" {

@@ -19,13 +19,15 @@ variable "hcloud_token_nixos" {
 # We download the OpenSUSE MicroOS x86 image from an automatically selected mirror.
 variable "nixos_x86_mirror_link" {
   type    = string
-  default = "http://77.7.27.12/nixos-x86_64-linux.qcow2.tar.gz"
+  #default = "http://77.2.191.221/nixos-x86_64-linux.qcow2"
+  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.1/nixos-x86_64-linux.qcow2"
 }
 
 # We download the OpenSUSE MicroOS ARM image from an automatically selected mirror.
 variable "nixos_arm_mirror_link" {
   type    = string
-  default = "http://77.7.27.12/nixos-aarch64-linux.qcow2.tar.gz"
+  #default = "http://77.2.191.221/nixos-aarch64-linux.qcow2"
+  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.1/nixos-aarch64-linux.qcow2"
 }
 
 # If you need to add other packages to the OS, do it here in the default value, like ["vim", "curl", "wget"]
@@ -40,21 +42,33 @@ locals {
   download_nixos_image = "wget --timeout=5 --waitretry=5 --tries=5 --retry-connrefused --inet4-only "
 
   write_nixos_image = <<-EOT
-    set -ex
+    set -e
+
     echo 'NixOS image loaded, writing to disk... '
-    tar -xvzf $(ls -a | grep -ie '^.*qcow2.tar.gz$')
     qemu-img convert -p -f qcow2 -O host_device $(ls -a | grep -ie '^.*qcow2$') /dev/sda
-    echo 'done. Rebooting...'
+
+    echo 'Rebooting...'
     sleep 1 && udevadm settle && reboot
   EOT
 
-  install_grub = <<-EOT
-    set -ex
+  rebuild_nixos = <<-EOT
+    set -euo pipefail
 
-    echo 'Add channel ...' 
+    echo 'Add channel...' 
     nix-channel --add https://nixos.org/channels/nixos-24.11 nixos
-    
+
     cd /etc/nixos
+
+    # backup old configuration
+    mv configuration.nix configuration.nix.bak
+    mv modules/configuration.nix modules/configuration.nix.bak
+
+    echo "Build new configuration..."
+    echo $'
+    {...}:
+    {
+      services.k3s.enable = true;
+    }' > modules/k3s.enable.nix
 
     echo $'
     {
@@ -62,27 +76,36 @@ locals {
       ...
     }:
     {
-      environment.defaultPackages = with pkgs; [ k3s ] ++ [ ${join(" ", var.nix_packages_to_install)} ];
-    }' > modules/default-packages.nix
+      environment.systemPackages = with pkgs; [ k3s ] ++ [ ${join(" ", var.nix_packages_to_install)} ];
+    }' > modules/system-packages.nix
+
+    # Wipe old kernels
+    rm -rf /boot/kernels
+
+    # Stop systemd automounted /boot to stop nixos-generate-config from generating /boot automount in hardware-configuration.nix
+    echo "Unmount /boot ESP"
+    systemctl stop boot.automount
+    systemctl stop boot.mount
     
-    mv configuration.nix configuration.nix.bak
-    mv modules/configuration.nix modules/configuration.nix.bak
-
-
-    echo "Build new hardware configuration with fileSystem info ..."
     nixos-generate-config
     sed -i "s/.\/hardware-configuration.nix/.\/hardware-configuration.nix\n     .\/modules/" configuration.nix
     
-    echo "Change current EFI-only boot config to Grub-EFI"
-    
+    echo "Change current systemd-boot to Grub-EFI"
+
     sed -i 's/# Use the systemd-boot EFI boot loader\.//' configuration.nix
-    sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { device = "\/dev\/sda"; enable = true; efiSupport = true; };\nboot.loader.systemd-boot.enable = false;/' configuration.nix
+    
+    # Have kernel images living in EFI partition is problematic, because we don't want to have it bigger than 256MB 
+    #sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { configurationLimit = 1; device = "\/dev\/sda"; enable = true; efiSupport = true; };\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/boot"; enable = false; }];/' configuration.nix
+    #sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
 
-    # For whatever reason the /boot filesystem is redundant and errors.
-    # See also: https://github.com/NixOS/nixpkgs/issues/283889
-    sed -zi 's/fileSystems."\/boot" =.*{.*}.*;//' hardware-configuration.nix
+    # Kernel images should live in main partition (works only for GRUB)
+    mkdir -p /boot/efi
+    mount /dev/sda1 /boot/efi
+    sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { device = "nodev"; enable = true; efiSupport = true; };\nboot.loader.efi.efiSysMountPoint = "\/boot\/efi";\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/boot"; enable = false; }];/' configuration.nix
+    sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot\/efi" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
+    
 
-    echo "Rebuild NixOs ..."
+    echo "Rebuild NixOS..."
     nixos-rebuild boot -I nixos-config=/etc/nixos/configuration.nix --upgrade
 
     echo "Cleaning-up..."    
@@ -92,22 +115,23 @@ locals {
     nix-store --gc
     nix-store --optimise
 
-    # Make snapshot size match the actual disk usage
+    # Make snapshot size match the actual file system disk usage
     fstrim -av
 
     echo "Done."
     sleep 1 && udevadm settle
 EOT
+
 }
 
 # Source for the MicroOS x86 snapshot
 source "hcloud" "nixos-x86-snapshot" {
   image       = "ubuntu-24.04"
   rescue      = "linux64"
-  #location    = "fsn1"
-  location     = "hel1"
-  # We need a dedicated vCPU, because shared x86_64 vCPU's don't support UEFI boot
-  server_type = "ccx13"
+  location    = "fsn1"
+  #location     = "hel1"
+  server_type = "ccx13"  # We need a dedicated vCPU, because shared x86_64 vCPU's don't support UEFI boot
+  #server_type = "cx22" # Shared vCPU
   snapshot_labels = {
     nixos-snapshot = "yes"
     creator        = "kube-hetzner"
@@ -122,7 +146,7 @@ source "hcloud" "nixos-arm-snapshot" {
   image       = "ubuntu-24.04"
   rescue      = "linux64"
   location    = "fsn1"
-  server_type = "cax21" # 80Gb disk size is needed to install the NixOS image
+  server_type = "cax11"
   snapshot_labels = {
     nixos-snapshot = "yes"
     creator          = "kube-hetzner"
@@ -149,27 +173,27 @@ build {
 
   provisioner "shell" {
     pause_before      = "5s"
-    inline            = [local.install_grub]
+    inline            = [local.rebuild_nixos]
   }
 }
 
 
 # Build the NixOS ARM snapshot
-#build {
-#  sources = ["source.hcloud.nixos-arm-snapshot"]
-#
-#  # Download the MicroOS ARM image
-#  provisioner "shell" {
-#    inline = ["${local.download_nixos_image}${var.nixos_arm_mirror_link}"]
-#  }
-#
-#  provisioner "shell" {
-#    inline            = [local.write_nixos_image]
-#    expect_disconnect = true
-#  }
-#
-#  provisioner "shell" {
-#    pause_before      = "5s"
-#    inline            = [local.install_grub]
-#  }
-#}
+build {
+  sources = ["source.hcloud.nixos-arm-snapshot"]
+
+  # Download the MicroOS ARM image
+  provisioner "shell" {
+    inline = ["${local.download_nixos_image}${var.nixos_arm_mirror_link}"]
+  }
+
+  provisioner "shell" {
+    inline            = [local.write_nixos_image]
+    expect_disconnect = true
+  }
+
+  provisioner "shell" {
+    pause_before      = "5s"
+    inline            = [local.rebuild_nixos]
+  }
+}

@@ -24,9 +24,9 @@ module "agents" {
   ipv4_subnet_id               = hcloud_network_subnet.agent[[for i, v in var.agent_nodepools : i if v.name == each.value.nodepool_name][0]].id
   dns_servers                  = var.dns_servers
   k3s_registries               = var.k3s_registries
-  k3s_registries_update_script = local.k3s_registries_update_script
-  cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.cloudinit_write_files_microos : local.cloudinit_write_files_nixos
-  cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.cloudinit_runcmd_microos : local.cloudinit_runcmd_nixos
+  k3s_registries_update_script = var.hcloud_server_os == "MicroOS" ? local.microos_k3s_registries_update_script : local.nixos_k3s_registries_update_script
+  cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_write_files : local.nixos_cloudinit_write_files
+  cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_runcmd : local.nixos_cloudinit_runcmd
   swap_size                    = each.value.swap_size
   zram_size                    = each.value.zram_size
   keep_disk_size               = var.keep_disk_agents
@@ -83,7 +83,7 @@ resource "null_resource" "agent_config" {
   }
 
   provisioner "remote-exec" {
-    inline = [local.k3s_config_update_script]
+    inline = var.hcloud_server_os == "MicroOS" ? [local.microos_k3s_config_update_script] : [local.nixos_k3s_config_update_script]
   }
 }
 
@@ -104,7 +104,7 @@ resource "null_resource" "agents" {
 
   # Install k3s agent
   provisioner "remote-exec" {
-    inline = local.install_k3s_agent
+    inline = var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_agent : local.nixos_install_k3s_agent
   }
 
   # Start the k3s agent and wait for it to have started

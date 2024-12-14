@@ -110,9 +110,9 @@ data "cloudinit_config" "autoscaler_config" {
           node-taint    = concat(local.default_agent_taints, [for taint in var.autoscaler_nodepools[count.index].taints : "${taint.key}=${taint.value}:${taint.effect}"])
           selinux       = true
         })
-        install_k3s_agent_script     = join("\n", concat(local.install_k3s_agent, ["systemctl start k3s-agent"]))
-        cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.cloudinit_write_files_microos : local.cloudinit_write_files_nixos
-        cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.cloudinit_runcmd_microos : local.cloudinit_runcmd_nixos
+        install_k3s_agent_script     = join("\n", concat(var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_agent : local.nixos_install_k3s_agent, ["systemctl start k3s-agent"]))
+        cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_write_files : local.nixos_cloudinit_write_files
+        cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_runcmd : local.nixos_cloudinit_runcmd
       }
     )
   }
@@ -142,9 +142,9 @@ data "cloudinit_config" "autoscaler_legacy_config" {
           node-taint    = concat(local.default_agent_taints, var.autoscaler_taints)
           selinux       = true
         })
-        install_k3s_agent_script     = join("\n", concat(local.install_k3s_agent, ["systemctl start k3s-agent"]))
-        cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.cloudinit_write_files_microos : local.cloudinit_write_files_nixos
-        cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.cloudinit_runcmd_microos : local.cloudinit_runcmd_nixos
+        install_k3s_agent_script     = join("\n", concat(var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_agent : local.nixos_install_k3s_agent, ["systemctl start k3s-agent"]))
+        cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_write_files : local.nixos_cloudinit_write_files
+        cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_runcmd : local.nixos_cloudinit_runcmd
       }
     )
   }
@@ -175,6 +175,6 @@ resource "null_resource" "autoscaled_nodes_registries" {
   }
 
   provisioner "remote-exec" {
-    inline = [local.k3s_registries_update_script]
+    inline = [local.microos_k3s_registries_update_script]
   }
 }

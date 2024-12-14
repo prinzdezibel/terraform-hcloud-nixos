@@ -24,9 +24,9 @@ module "control_planes" {
   ipv4_subnet_id               = hcloud_network_subnet.control_plane[[for i, v in var.control_plane_nodepools : i if v.name == each.value.nodepool_name][0]].id
   dns_servers                  = var.dns_servers
   k3s_registries               = var.k3s_registries
-  k3s_registries_update_script = local.k3s_registries_update_script
-  cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.cloudinit_write_files_microos : local.cloudinit_write_files_nixos
-  cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.cloudinit_runcmd_microos : local.cloudinit_runcmd_nixos
+  k3s_registries_update_script = var.hcloud_server_os == "MicroOS" ? local.microos_k3s_registries_update_script : local.nixos_k3s_registries_update_script
+  cloudinit_write_files_common = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_write_files : local.nixos_cloudinit_write_files
+  cloudinit_runcmd_common      = var.hcloud_server_os == "MicroOS" ? local.microos_cloudinit_runcmd : local.nixos_cloudinit_runcmd
   swap_size                    = each.value.swap_size
   zram_size                    = each.value.zram_size
   keep_disk_size               = var.keep_disk_cp
@@ -146,7 +146,7 @@ resource "null_resource" "control_plane_config" {
   }
 
   provisioner "remote-exec" {
-    inline = [local.k3s_config_update_script]
+    inline = var.hcloud_server_os == "MicroOS" ? [local.microos_k3s_config_update_script] : [local.nixos_k3s_config_update_script]
   }
 
   depends_on = [
@@ -157,7 +157,10 @@ resource "null_resource" "control_plane_config" {
 
 
 resource "null_resource" "authentication_config" {
-  for_each = local.control_plane_nodes
+  for_each = {
+    for k, v in var.authentication_config_instances : k => v
+    if var.hcloud_server_os == "MicroOS" && var.authentication_config != ""
+  }
 
   triggers = {
     control_plane_id      = module.control_planes[each.key].id
@@ -204,12 +207,14 @@ resource "null_resource" "control_planes" {
 
   # Install k3s server
   provisioner "remote-exec" {
-    inline = local.install_k3s_server
+    # null_resource.first_control_plane did this already
+    inline = startswith(each.key, "0-0-") ? ["true"] : (var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_server : local.nixos_install_k3s_server)
   }
-  
-  # Start the k3s server and wait for it to have started correctly
+
   provisioner "remote-exec" {
-    inline = [
+    #inline = [
+    inline = startswith(each.key, "0-0-") == 0 ? ["true"] : [
+      "echo \"Start k3s server...\"",
       "systemctl start k3s 2> /dev/null",
       # prepare the needed directories
       "mkdir -p /var/post_install /var/user_kustomize",
@@ -223,6 +228,8 @@ resource "null_resource" "control_planes" {
         done
       EOF
       EOT
+      ,
+      "echo \"k3s server is up\"",
     ]
   }
 

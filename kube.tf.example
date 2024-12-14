@@ -54,6 +54,11 @@ module "kube-hetzner" {
   # It is important that exactly this key is passed via `ssh_public_key` & `ssh_private_key` variables.
   # hcloud_ssh_key_id = ""
 
+  # Specifiy immutable operating system for nodes. 
+  # Note that NixOS does not support all features yet.
+  # Default is "MicroOS"
+  # hcloud_server_os = "NixOS"
+
   # These can be customized, or left with the default values
   # * For Hetzner locations see https://docs.hetzner.com/general/others/data-centers-and-connection/
   network_region = "eu-central" # change to `us-east` if location is ash
@@ -275,6 +280,9 @@ module "kube-hetzner" {
   #  kube-controller-manager-arg = "bind-address=0.0.0.0",
   #  kube-proxy-arg ="metrics-bind-address=0.0.0.0",
   #  kube-scheduler-arg = "bind-address=0.0.0.0",
+  #
+  #  https://github.com/kube-hetzner/terraform-hcloud-kube-hetzner/discussions/505#discussioncomment-4845580
+  #  embedded-registry = true,
   # }
 
   # You can enable encrypted wireguard for the CNI by setting this to "true". Default is "false".
@@ -583,6 +591,9 @@ module "kube-hetzner" {
   # The default is "true" (in HA setup it works wonderfully well, with automatic roll-back to the previous snapshot in case of an issue).
   # IMPORTANT! For non-HA clusters i.e. when the number of control-plane nodes is < 3, you have to turn it off.
   # automatically_upgrade_os = false
+
+  # Disable Security-Enhanced Linux kernel module (SELinux). The default is false.
+  # disable_selinux = true
 
   # If you need more control over kured and the reboot behaviour, you can pass additional options to kured.
   # For example limiting reboots to certain timeframes. For all options see: https://kured.dev/docs/configuration/

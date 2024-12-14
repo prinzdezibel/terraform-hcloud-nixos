@@ -68,12 +68,13 @@ resource "null_resource" "first_control_plane" {
 
   # Install k3s server
   provisioner "remote-exec" {
-    inline = local.install_k3s_server
+    inline = var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_server : local.nixos_install_k3s_server
   }
 
-  # Upon reboot start k3s and wait for it to be ready to receive commands
+  # Start k3s and wait for it to be ready to receive commands
   provisioner "remote-exec" {
     inline = [
+      "echo \"Start first control plane k3s server...\"",
       "systemctl start k3s",
       # prepare the needed directories
       "mkdir -p /var/post_install /var/user_kustomize",
@@ -95,6 +96,8 @@ resource "null_resource" "first_control_plane" {
         done
       EOF
       EOT
+      ,
+      "echo \"First control plane k3s server is ready\""
     ]
   }
 
