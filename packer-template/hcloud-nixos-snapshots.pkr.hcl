@@ -19,14 +19,14 @@ variable "hcloud_token_nixos" {
 # We download the OpenSUSE MicroOS x86 image from an automatically selected mirror.
 variable "nixos_x86_mirror_link" {
   type    = string
-  #default = "http://77.2.191.221/nixos-x86_64-linux.qcow2"
+  #default = "http://77.7.168.194/nixos-x86_64-linux.qcow2"
   default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.1/nixos-x86_64-linux.qcow2"
 }
 
 # We download the OpenSUSE MicroOS ARM image from an automatically selected mirror.
 variable "nixos_arm_mirror_link" {
   type    = string
-  #default = "http://77.2.191.221/nixos-aarch64-linux.qcow2"
+  #default = "http://77.7.168.194/nixos-aarch64-linux.qcow2"
   default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.1/nixos-aarch64-linux.qcow2"
 }
 
@@ -81,29 +81,31 @@ locals {
 
     # Wipe old kernels
     rm -rf /boot/kernels
-
-    # Stop systemd automounted /boot to stop nixos-generate-config from generating /boot automount in hardware-configuration.nix
-    echo "Unmount /boot ESP"
-    systemctl stop boot.automount
-    systemctl stop boot.mount
-    
+  
     nixos-generate-config
     sed -i "s/.\/hardware-configuration.nix/.\/hardware-configuration.nix\n     .\/modules/" configuration.nix
-    
-    echo "Change current systemd-boot to Grub-EFI"
+
+    echo "Change current UEFI-enabled systemd-boot to GRUB BIOS/GPT setup."
 
     sed -i 's/# Use the systemd-boot EFI boot loader\.//' configuration.nix
     
     # Have kernel images living in EFI partition is problematic, because we don't want to have it bigger than 256MB 
-    #sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { configurationLimit = 1; device = "\/dev\/sda"; enable = true; efiSupport = true; };\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/boot"; enable = false; }];/' configuration.nix
-    #sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
+    sed -i 's/boot.loader.efi.canTouchEfiVariables = true;/boot.loader.efi.canTouchEfiVariables = false;/' configuration.nix
+    sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { enable = true; configurationLimit = 1; device = "\/dev\/sda"; efiSupport = true; efiInstallAsRemovable = true; };\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/efi"; enable = false; } { where = "\/boot"; enable = false; }];/' configuration.nix
+    sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
 
     # Kernel images should live in main partition (works only for GRUB)
-    mkdir -p /boot/efi
-    mount /dev/sda1 /boot/efi
-    sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { device = "nodev"; enable = true; efiSupport = true; };\nboot.loader.efi.efiSysMountPoint = "\/boot\/efi";\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/boot"; enable = false; }];/' configuration.nix
-    sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot\/efi" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
+    #echo "Unmount /boot ESP"
+    #systemctl stop boot.automount
+    #systemctl stop boot.mount
+    #mkdir -p /boot/efi
+    #mount /dev/sda1 /boot/efi
+    #sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { device = "nodev"; enable = true; efiSupport = true; };\nboot.loader.efi.efiSysMountPoint = "\/boot\/efi";\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/efi"; enable = false; } { where = "\/boot"; enable = false; }];/' configuration.nix
+    #sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot\/efi" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
     
+    # TODO: Delete when systemd.network.enable is set in qemu-cloud-image
+    sed -i 's/systemd.network.enable = false;/systemd.network.enable = true;/' modules/base-system.nix
+    sed -zi 's/networking.networkmanager =.*{.*}.*;/networking.networkmanager.enable = false;/' modules/base-system.nix
 
     echo "Rebuild NixOS..."
     nixos-rebuild boot -I nixos-config=/etc/nixos/configuration.nix --upgrade

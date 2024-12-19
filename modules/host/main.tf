@@ -105,7 +105,7 @@ resource "null_resource" "automatic_updates" {
 }
 
 resource "null_resource" "registries" {
-  
+
   triggers = {
     registries = var.k3s_registries
   }
@@ -163,6 +163,26 @@ data "cloudinit_config" "config" {
         hcloud_server_os             = var.hcloud_server_os
       }
     )
+  }
+}
+
+resource "null_resource" "hostname_config" {
+  count = var.hcloud_server_os == "NixOS" ? 1 : 0
+
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = hcloud_server.server.ipv4_address
+    port           = var.ssh_port
+  }
+  provisioner "file" {
+    content     = <<-EOT
+    {...}:{
+      networking.hostName = "${local.name}";
+    }
+EOT
+    destination = "/etc/nixos/modules/hostname.nix"
   }
 }
 

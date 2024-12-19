@@ -1071,51 +1071,136 @@ nixos_install_k3s = concat(
     INTERFACE_PUBLIC=$(ip link show | awk '/^2:/{print $2}' | sed 's/://g')
     MAC_PUBLIC=$(cat /sys/class/net/$INTERFACE_PUBLIC/address)
 
+    # Rename public interface
+    # This is needed before the first nixos-rebuild, because cloud-init network configuration expects an interface eth0
+    ip link set $INTERFACE_PUBLIC down
+    ip link set $INTERFACE_PUBLIC name eth0
+    ip link set eth0 up
+
     INTERFACE_PRIVATE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
     MAC_PRIVATE=$(cat /sys/class/net/$INTERFACE_PRIVATE/address)
+    IPV4_PRIVATE=$(ip addr show dev $INTERFACE_PRIVATE| sed -e's/^.*inet \([^ ]*\)\/.*$/\1/;t;d')
+    IPV6_PRIVATE=$(ip addr show dev $INTERFACE_PRIVATE| sed -e's/^.*inet6 \([^ ]*\)\/.*$/\1/;t;d')
+
+    # Rename eth1 interface
+    #ip link property add dev $INTERFACE_PRIVATE altname $INTERFACE_PRIVATE
+    ip link set $INTERFACE_PRIVATE down
+    ip link set $INTERFACE_PRIVATE name eth1
+    ip link set eth1 up
+    
+
+    #SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC_PUBLIC", NAME="eth0"
+    cat <<EOF > /etc/nixos/modules/udev.nix
+    {...}:{
+        services.udev.extraRules = ''
+          SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC_PRIVATE", NAME="eth1"
+        '';
+    }
+EOF
+
+    cat <<-EOF > /etc/nixos/modules/networking.nix
+    {lib,...}:{
+      networking.useDHCP = lib.mkForce false;
+      systemd.network.enable = lib.mkForce true;
+      networking.useNetworkd = lib.mkForce true;
+      networking.networkmanager.enable = lib.mkForce false;
+
+      systemd.network.networks."20-private" = {
+        matchConfig.MACAddress = "$MAC_PRIVATE";
+        networkConfig.DHCP = "no";
+        
+        # IP6 config needs to be done manually
+        address = [
+          "$${IPV4_PRIVATE}"
+          "$${IPV6_PRIVATE}/64"
+        ];
+        #routes = [
+        #  { routeConfig.Gateway = "fe80::1"; }
+        #];
+      };
+
+      systemd.network.links."20-private" = {
+        matchConfig.MACAddress = "$MAC_PRIVATE";
+        linkConfig.AlternativeName = "$INTERFACE_PRIVATE";
+      };
+
+    }
+EOF
+
+#%{if length(var.dns_servers) > 0}
+#    cat <<-EOF > /etc/nixos/modules/nameservers.nix
+#    {...}:{
+#      networking.nameservers = [%{for server in var.dns_servers~}''${server}'' %{endfor}];
+#    }
+#EOF
+#%{endif}
+#
+
 
     cat <<EOF > /etc/nixos/modules/k3s.extraFlags.nix
       {...}:{
         services.k3s.extraFlags = "$SERVER_ARGS";
       }
-    EOF
+EOF
 
     cat <<EOF > /etc/nixos/modules/k3s.role.nix
     {...}:{
      services.k3s.role = "$ROLE";
     }
-    EOF
+EOF
 
-    cat <<EOF > /etc/nixos/modules/udev.nix
-    {...}:{
-        services.udev.extraRules = ''
-          SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC_PUBLIC", NAME="eth0"
-          SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="$MAC_PRIVATE", NAME="eth1"
-        '';
-    }
-    EOF
+#    cat <<EOF > /etc/nixos/modules/journald.nix
+#    {...}:{
+#      # Bounds the amount of logs that can survive on the system
+#      services.journald = {
+#        extraConfig = ''
+#          SystemMaxUse=3G
+#          MaxRetentionSec=1week
+#        '';
+#      };
+#    }
+#EOF
+
+#cat <<EOF > /etc/nixos/modules/sshd_config.nix
+#{...}:{
+#    services.openssh = {
+#      enable = true;
+#      ports = [ ${var.ssh_port} ];
+#      settings = {
+#        X11Forwarding = false;      
+#        PasswordAuthentication = false;
+#      };
+#      extraConfig = ''
+#        MaxAuthTries ${var.ssh_max_auth_tries}
+#        AllowTcpForwarding no
+#        AllowAgentForwarding no
+#        AuthorizedKeysFile .ssh/authorized_keys
+#      '';
+#    };
+#}
+#EOF
 
     nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
 
-    ip link set $INTERFACE_PUBLIC down
-    ip link set $INTERFACE_PUBLIC name eth0
-    ip link set eth0 up
+    # ip link set $INTERFACE_PUBLIC down
+    # ip link set $INTERFACE_PUBLIC name eth0
+    # ip link set eth0 up
 
-    ip link set $INTERFACE_PRIVATE down
-    ip link set $INTERFACE_PRIVATE name eth1
-    ip link set eth1 up
+    # ip link set $INTERFACE_PRIVATE down
+    # ip link set $INTERFACE_PRIVATE name eth1
+    # ip link set eth1 up
 
-    eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0)
-    nmcli connection modify "$eth0_connection" \
-      con-name eth0 \
-      connection.interface-name eth0
+    # eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0)
+    # nmcli connection modify "$eth0_connection" \
+    #   con-name eth0 \
+    #   connection.interface-name eth0
 
-    eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1)
-    nmcli connection modify "$eth1_connection" \
-      con-name eth1 \
-      connection.interface-name eth1
+    # eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1)
+    # nmcli connection modify "$eth1_connection" \
+    #   con-name eth1 \
+    #   connection.interface-name eth1
 
-    systemctl restart NetworkManager
+    # systemctl restart NetworkManager
 
   EOT
   ],
@@ -1138,10 +1223,17 @@ nixos_k3s_registries_update_script = <<-EOF
   #!/bin/bash
   set -euo pipefail
 
+  # Rename public interface
+  # This is needed before the first nixos-rebuild, because cloud-init network configuration expects an interface eth0
+  INTERFACE_PUBLIC=$(ip link show | awk '/^2:/{print $2}' | sed 's/://g')
+  ip link set $INTERFACE_PUBLIC down
+  ip link set $INTERFACE_PUBLIC name eth0
+  ip link set eth0 up
+
   if [ -f /etc/rancher/k3s/registries.yaml ] && cmp -s /tmp/registries.yaml $(readlink -f /etc/rancher/k3s/registries.yaml); then
     echo "No update required to the registries.yaml file"
   else
-    echo "Updated registries.yaml detected, restart of k3s service required"
+    echo "Updated registries.yaml detected, rebuild required"
 
     cat <<-EOT > /etc/nixos/modules/k3s-registries.nix
       {...}:{
@@ -1151,11 +1243,7 @@ EOT
 
     nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
 
-    if [[ $? -ne 0 ]]; then
-      echo "Error: Failed to update registries.yaml. Roll back to old /etc/rancher/k3s/registries.yaml." && nixos-rebuild --rollback switch
-    else
-      echo "k3s service or k3s-agent service restarted successfully"
-    fi
+    echo "k3s service restarted successfully"
   fi
 EOF
 
@@ -1166,7 +1254,7 @@ nixos_k3s_config_update_script = <<-EOF
   if [ -f /etc/rancher/k3s/config.yaml ] && cmp -s /tmp/config.yaml $(readlink -f /etc/rancher/k3s/config.yaml); then
     echo "No update required to the config.yaml file"
   else
-    echo "Updated registries.yaml detected, restart of k3s service required"
+    echo "Updated registries.yaml detected, rebuild required"
 
     cat <<EOT > /etc/nixos/modules/k3s-config.nix
       {...}:{
@@ -1176,26 +1264,23 @@ EOT
 
     nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
 
-    if [[ $? -ne 0 ]]; then
-      echo "Error: Failed to update config.yaml. Roll back to old /etc/rancher/k3s/config.yaml." && nixos-rebuild --rollback switch
-    else
-      echo "k3s service or k3s-agent service restarted successfully"
-    fi
+    echo "k3s service restarted successfully"
   fi
 EOF
 
 nixos_cloudinit_runcmd = <<-EOT
 
 INTERFACE_PRIVATE=$(ip link show | awk '/^3:/{print $2}' | sed 's/://g')
-MAC_PRIVATE=$(cat /sys/class/net/$INTERFACE_PRIVATE/address)
-ip link set $INTERFACE_PRIVATE down
-ip link set $INTERFACE_PRIVATE name eth1
-ip link set eth1 up
-eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1)
-nmcli connection modify "$eth1_connection" \
-  con-name eth1 \
-  connection.interface-name eth1
-systemctl restart NetworkManager
+
+#MAC_PRIVATE=$(cat /sys/class/net/$INTERFACE_PRIVATE/address)
+#ip link set $INTERFACE_PRIVATE down
+#ip link set $INTERFACE_PRIVATE name eth1
+#ip link set eth1 up
+#eth1_connection=$(nmcli -g GENERAL.CONNECTION device show eth1)
+#nmcli connection modify "$eth1_connection" \
+#  con-name eth1 \
+#  connection.interface-name eth1
+#systemctl restart NetworkManager
 
 # Disable rebootmgr service as we use kured instead
 #- [systemctl, disable, '--now', 'rebootmgr.service']
@@ -1203,6 +1288,7 @@ systemctl restart NetworkManager
 ## Set the dns manually
 #- [systemctl, 'reload', 'NetworkManager']
 #%{endif}
+
 # Reduces the default number of snapshots from 2-10 number limit, to 4 and from 4-10 number limit important, to 2
 #- [sed, '-i', 's/NUMBER_LIMIT="2-10"/NUMBER_LIMIT="4"/g', /etc/snapper/configs/root]
 #- [sed, '-i', 's/NUMBER_LIMIT_IMPORTANT="4-10"/NUMBER_LIMIT_IMPORTANT="3"/g', /etc/snapper/configs/root]
@@ -1221,85 +1307,19 @@ systemctl restart NetworkManager
 EOT
 
 nixos_cloudinit_write_files = <<-EOT
+- content: 'a simple file to prevent 'none' as literal content of this here-document (see locals.tf, nixos_cloud_init_write_files)'
+  path: /tmp/noop-file-to-make-cloud-init-happy
 
-- path: /etc/nixos/modules/routes.nix
-  content: |
-    {...}:{
-      # Make sure the network is up
-      #- [systemctl, restart, NetworkManager]
-      #- [systemctl, status, NetworkManager]
-      #- [ip, route, add, default, via, '172.31.1.1', dev, 'eth0']
-
-      # networking.interfaces.eth0.ipv4.routes = [{
-      #   address = "172.31.1.1";
-      # }]
-    }
-
-- path: /etc/nixos/modules/sshd_config.nix
-  content: |
-    {...}:{
-        services.openssh = {
-          enable = true;
-          ports = [ ${var.ssh_port} ];
-          settings = {
-            X11Forwarding = false;      
-            PasswordAuthentication = false;
-          };
-          extraConfig = ''
-            MaxAuthTries ${var.ssh_max_auth_tries}
-            AllowTcpForwarding no
-            AllowAgentForwarding no
-            AuthorizedKeysFile .ssh/authorized_keys
-          '';
-        };
-    }
-
-- path: /etc/nixos/modules/journald.nix
-  content: |
-    {...}:{
-      # Bounds the amount of logs that can survive on the system
-      services.journald = {
-          extraConfig = ''
-            SystemMaxUse=3G
-            MaxRetentionSec=1week
-          '';
-      };
-    }  
-
-## Set reboot method as "kured"
-#- content: |
-#    REBOOT_METHOD=kured
-#  path: /etc/transactional-update.conf
-#
-## Create Rancher repo config
-#- content: |
-#    [rancher-k3s-common-stable]
-#    name=Rancher K3s Common (stable)
-#    baseurl=https://rpm.rancher.io/k3s/stable/common/microos/noarch
-#    enabled=1
-#    gpgcheck=1
-#    repo_gpgcheck=0
-#    gpgkey=https://rpm.rancher.io/public.key
-#  path: /etc/zypp/repos.d/rancher-k3s-common.repo
-#
-#
 ## Create the k3s registries file if needed
 #%{if var.k3s_registries != ""}
-## Create k3s registries file
 #- content: ${base64encode(var.k3s_registries)}
 #  encoding: base64
 #  path: /etc/rancher/k3s/registries.yaml
 #%{endif}
 #
-## Apply new DNS config
+# Apply new DNS config
 # https://github.com/NixOS/nixpkgs/issues/65925
 #%{if length(var.dns_servers) > 0}
-## Set prepare for manual dns config
-#- content: |
-#    [main]
-#    dns=none
-#  path: /etc/NetworkManager/conf.d/dns.conf
-#
 #- content: |
 #    %{for server in var.dns_servers~}
 #    nameserver ${server}

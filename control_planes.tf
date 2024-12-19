@@ -212,7 +212,6 @@ resource "null_resource" "control_planes" {
   }
 
   provisioner "remote-exec" {
-    #inline = [
     inline = startswith(each.key, "0-0-") == 0 ? ["true"] : [
       "echo \"Start k3s server...\"",
       "systemctl start k3s 2> /dev/null",
