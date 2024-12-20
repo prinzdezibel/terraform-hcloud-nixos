@@ -68,7 +68,50 @@ resource "null_resource" "first_control_plane" {
 
   # Install k3s server
   provisioner "remote-exec" {
-    inline = var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_server : local.nixos_install_k3s_server
+    inline = var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_server : concat([
+      "export INIT_CLUSTER=true",
+      "export ROLE=server",
+      "export SERVER_ARGS=\"${var.k3s_exec_server_args}\"",
+      ],
+      local.nixos_install_k3s
+    )
+  }
+
+  depends_on = [
+    hcloud_network_subnet.control_plane
+  ]
+}
+
+resource "null_resource" "rebuild_first_control_plane" {
+  count = var.hcloud_server_os == "NixOS" ? 1 : 0
+
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = module.control_planes[keys(module.control_planes)[0]].ipv4_address
+    port           = var.ssh_port
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -o errexit",
+      "nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix"
+    ]
+  }
+  depends_on = [
+    null_resource.first_control_plane
+  ]
+}
+
+resource "null_resource" "first_control_plane_start_server" {
+  
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = module.control_planes[keys(module.control_planes)[0]].ipv4_address
+    port           = var.ssh_port
   }
 
   # Start k3s and wait for it to be ready to receive commands
@@ -101,10 +144,10 @@ resource "null_resource" "first_control_plane" {
     ]
   }
 
-  depends_on = [
-    hcloud_network_subnet.control_plane
-  ]
+  depends_on = [ null_resource.rebuild_first_control_plane ]
 }
+
+
 
 # Needed for rancher setup
 resource "random_password" "rancher_bootstrap" {

@@ -77,14 +77,6 @@ variable "authentication_config" {
   }
 }
 
-variable "authentication_config_instances" {
-  description = "Structured authentication configuration. This can be used to define external authentication providers."
-  type = map(object({
-    type      = string
-  }))
-  default     = {}
-}
-
 variable "hcloud_ssh_key_id" {
   description = "If passed, a key already registered within hetzner is used. Otherwise, a new one will be created by the module."
   type        = string

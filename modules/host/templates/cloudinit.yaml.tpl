@@ -20,11 +20,11 @@ growpart:
 # Resize /var, not /, as that's the last partition in MicroOS image.
 growpart:
     devices: ["/var"]
-%{endif~}
 
 # Make sure the hostname is set correctly
 hostname: ${hostname}
 preserve_hostname: true
+%{endif~}
 
 runcmd:
 

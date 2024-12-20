@@ -150,15 +150,44 @@ resource "null_resource" "control_plane_config" {
   }
 
   depends_on = [
-    null_resource.first_control_plane,
+    null_resource.first_control_plane_start_server,
     hcloud_network_subnet.control_plane
   ]
 }
 
+resource "null_resource" "control_plane_configure_private_interface" {
+
+  for_each = { for k, v in local.control_plane_nodes : k => v if(var.hcloud_server_os == "NixOS") }
+  #for_each = local.control_plane_nodes
+
+  triggers = {
+    control_plane_id = module.control_planes[each.key].id
+  }
+
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = module.control_planes[each.key].ipv4_address
+    port           = var.ssh_port
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -o errexit",
+      "export IPV4_PRIVATE=${module.control_planes[each.key].private_ipv4_address}",
+      local.configure_private_interface
+    ]
+  }
+
+  depends_on = [
+    hcloud_network_subnet.control_plane
+  ]
+}
 
 resource "null_resource" "authentication_config" {
   for_each = {
-    for k, v in var.authentication_config_instances : k => v
+    for k, v in local.control_plane_nodes : k => v
     if var.hcloud_server_os == "MicroOS" && var.authentication_config != ""
   }
 
@@ -185,7 +214,7 @@ resource "null_resource" "authentication_config" {
   }
 
   depends_on = [
-    null_resource.first_control_plane,
+    null_resource.first_control_plane_start_server,
     hcloud_network_subnet.control_plane
   ]
 }
@@ -207,35 +236,48 @@ resource "null_resource" "control_planes" {
 
   # Install k3s server
   provisioner "remote-exec" {
-    # null_resource.first_control_plane did this already
-    inline = startswith(each.key, "0-0-") ? ["true"] : (var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_server : local.nixos_install_k3s_server)
+    inline = var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_server : concat([
+      "export INIT_CLUSTER=false",
+      "export ROLE=server",
+      "export SERVER_ARGS=\"${var.k3s_exec_server_args}\"",
+      ],
+      local.nixos_install_k3s
+    )
+  }
+
+  depends_on = [
+    null_resource.first_control_plane_start_server,
+    null_resource.control_plane_config,
+    null_resource.authentication_config,
+    hcloud_network_subnet.control_plane
+  ]
+}
+
+resource "null_resource" "nixos_rebuild_control_planes" {
+  for_each = {
+    for k, v in local.control_plane_nodes : k => v if var.hcloud_server_os == "NixOS"
+  }
+
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = module.control_planes[each.key].ipv4_address
+    port           = var.ssh_port
   }
 
   provisioner "remote-exec" {
-    inline = startswith(each.key, "0-0-") == 0 ? ["true"] : [
-      "echo \"Start k3s server...\"",
-      "systemctl start k3s 2> /dev/null",
-      # prepare the needed directories
-      "mkdir -p /var/post_install /var/user_kustomize",
-      # wait for the server to be ready
-      <<-EOT
-      timeout 360 bash <<EOF
-        until systemctl status k3s > /dev/null; do
-          systemctl start k3s 2> /dev/null
-          echo "Waiting for the k3s server to start..."
-          sleep 3
-        done
-      EOF
-      EOT
-      ,
-      "echo \"k3s server is up\"",
+    inline = [
+      "set -o errexit",
+      "nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix"
     ]
   }
 
   depends_on = [
-    null_resource.first_control_plane,
+    module.control_planes,
+    null_resource.first_control_plane_start_server,
     null_resource.control_plane_config,
+    null_resource.control_plane_configure_private_interface,
     null_resource.authentication_config,
-    hcloud_network_subnet.control_plane
   ]
 }

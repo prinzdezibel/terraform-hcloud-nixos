@@ -184,6 +184,30 @@ resource "null_resource" "hostname_config" {
 EOT
     destination = "/etc/nixos/modules/hostname.nix"
   }
+
+  provisioner "remote-exec" {
+    inline = [
+    <<-EOT
+
+    # Set hostname temporarily (uname -n)
+    echo "${local.name}" > /proc/sys/kernel/hostname
+
+    # Check public interface
+    INTERFACE_PUBLIC=$(ip link show | awk '/^2:/{print $2}' | sed 's/://g')
+    if [ "$INTERFACE_PUBLIC" != "eth0" ]; then
+        echo "Unexpected public interface name: $${INTERFACE_PUBLIC}"
+        exit 1
+    fi
+    #ip link set $INTERFACE_PUBLIC down
+    #ip link set $INTERFACE_PUBLIC name eth0
+    #ip link set eth0 up
+    EOT
+    ]
+  }
+
+  depends_on = [
+    hcloud_server.server
+  ]
 }
 
 resource "null_resource" "zram" {

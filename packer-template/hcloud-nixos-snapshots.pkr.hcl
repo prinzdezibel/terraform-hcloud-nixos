@@ -19,15 +19,13 @@ variable "hcloud_token_nixos" {
 # We download the OpenSUSE MicroOS x86 image from an automatically selected mirror.
 variable "nixos_x86_mirror_link" {
   type    = string
-  #default = "http://77.7.168.194/nixos-x86_64-linux.qcow2"
-  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.1/nixos-x86_64-linux.qcow2"
+  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.3/nixos-x86_64-linux.qcow2"
 }
 
 # We download the OpenSUSE MicroOS ARM image from an automatically selected mirror.
 variable "nixos_arm_mirror_link" {
   type    = string
-  #default = "http://77.7.168.194/nixos-aarch64-linux.qcow2"
-  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.1/nixos-aarch64-linux.qcow2"
+  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.3/nixos-aarch64-linux.qcow2"
 }
 
 # If you need to add other packages to the OS, do it here in the default value, like ["vim", "curl", "wget"]
@@ -65,12 +63,6 @@ locals {
 
     echo "Build new configuration..."
     echo $'
-    {...}:
-    {
-      services.k3s.enable = true;
-    }' > modules/k3s.enable.nix
-
-    echo $'
     {
       pkgs,
       ...
@@ -102,10 +94,6 @@ locals {
     #mount /dev/sda1 /boot/efi
     #sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { device = "nodev"; enable = true; efiSupport = true; };\nboot.loader.efi.efiSysMountPoint = "\/boot\/efi";\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/efi"; enable = false; } { where = "\/boot"; enable = false; }];/' configuration.nix
     #sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot\/efi" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
-    
-    # TODO: Delete when systemd.network.enable is set in qemu-cloud-image
-    sed -i 's/systemd.network.enable = false;/systemd.network.enable = true;/' modules/base-system.nix
-    sed -zi 's/networking.networkmanager =.*{.*}.*;/networking.networkmanager.enable = false;/' modules/base-system.nix
 
     echo "Rebuild NixOS..."
     nixos-rebuild boot -I nixos-config=/etc/nixos/configuration.nix --upgrade
@@ -130,8 +118,8 @@ EOT
 source "hcloud" "nixos-x86-snapshot" {
   image       = "ubuntu-24.04"
   rescue      = "linux64"
-  location    = "fsn1"
-  #location     = "hel1"
+  #location    = "fsn1"
+  location     = "hel1"
   server_type = "ccx13"  # We need a dedicated vCPU, because shared x86_64 vCPU's don't support UEFI boot
   #server_type = "cx22" # Shared vCPU
   snapshot_labels = {

@@ -87,6 +87,36 @@ resource "null_resource" "agent_config" {
   }
 }
 
+resource "null_resource" "agent_configure_private_interface" {
+
+  for_each = { for k, v in local.agent_nodes : k => v if(var.hcloud_server_os == "NixOS") }
+  #for_each = local.agent_nodes
+
+  triggers = {
+    agent_id = module.agents[each.key].id
+  }
+
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = module.agents[each.key].ipv4_address
+    port           = var.ssh_port
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -o errexit",
+      "export IPV4_PRIVATE=${module.agents[each.key].private_ipv4_address}",
+      local.configure_private_interface
+    ]
+  }
+
+  depends_on = [
+    hcloud_network_subnet.agent
+  ]
+}
+
 resource "null_resource" "agents" {
   for_each = local.agent_nodes
 
@@ -107,24 +137,8 @@ resource "null_resource" "agents" {
     inline = var.hcloud_server_os == "MicroOS" ? local.microos_install_k3s_agent : local.nixos_install_k3s_agent
   }
 
-  # Start the k3s agent and wait for it to have started
-  provisioner "remote-exec" {
-    inline = concat(var.enable_longhorn || var.enable_iscsid ? ["systemctl enable --now iscsid"] : [], [
-      "systemctl start k3s-agent 2> /dev/null",
-      <<-EOT
-      timeout 120 bash <<EOF
-        until systemctl status k3s-agent > /dev/null; do
-          systemctl start k3s-agent 2> /dev/null
-          echo "Waiting for the k3s agent to start..."
-          sleep 2
-        done
-      EOF
-      EOT
-    ])
-  }
-
   depends_on = [
-    null_resource.first_control_plane,
+    null_resource.first_control_plane_start_server,
     null_resource.agent_config,
     hcloud_network_subnet.agent
   ]
@@ -192,7 +206,7 @@ resource "hcloud_floating_ip_assignment" "agents" {
   server_id      = module.agents[each.key].id
 
   depends_on = [
-    null_resource.agents
+    null_resource.nixos_rebuild_agents
   ]
 }
 
@@ -234,4 +248,65 @@ resource "null_resource" "configure_floating_ip" {
   depends_on = [
     hcloud_floating_ip_assignment.agents
   ]
+}
+
+resource "null_resource" "nixos_rebuild_agents" {
+  for_each = {
+    for k, v in local.agent_nodes : k => v if var.hcloud_server_os == "NixOS"
+  }
+
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = module.agents[each.key].ipv4_address
+    port           = var.ssh_port
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -o errexit",
+      "nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix"
+    ]
+  }
+
+  depends_on = [
+    module.agents,
+    null_resource.first_control_plane_start_server,
+    null_resource.agent_config,
+    null_resource.agent_configure_private_interface,
+  ]
+}
+
+
+resource "null_resource" "agents_start_server" {
+
+  for_each = local.agent_nodes
+
+  connection {
+    user           = "root"
+    private_key    = var.ssh_private_key
+    agent_identity = local.ssh_agent_identity
+    host           = module.agents[each.key].ipv4_address
+    port           = var.ssh_port
+  }
+
+  # Start the k3s agent and wait for it to have started
+  provisioner "remote-exec" {
+    inline = concat(var.enable_longhorn || var.enable_iscsid ? ["systemctl enable --now iscsid"] : [], [
+      var.hcloud_server_os == "MicroOS" ? "SERVICE_NAME=k3s-agent" : "SERVICE_NAME=k3s",
+      "systemctl start $SERVICE_NAME 2> /dev/null",
+      <<-EOT
+      timeout 120 bash <<EOF
+        until systemctl status $SERVICE_NAME > /dev/null; do
+          systemctl start $SERVICE_NAME 2> /dev/null
+          echo "Waiting for the k3s agent to start..."
+          sleep 2
+        done
+      EOF
+      EOT
+    ])
+  }
+
+  depends_on = [null_resource.nixos_rebuild_agents]
 }
