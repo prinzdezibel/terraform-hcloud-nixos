@@ -220,6 +220,7 @@ variable "agent_nodepools" {
     location                   = string
     backups                    = optional(bool)
     floating_ip                = optional(bool)
+    floating_ip_rdns           = optional(string, null)
     labels                     = list(string)
     taints                     = list(string)
     longhorn_volume_size       = optional(number)
@@ -235,6 +236,7 @@ variable "agent_nodepools" {
       location                   = optional(string)
       backups                    = optional(bool)
       floating_ip                = optional(bool)
+      floating_ip_rdns           = optional(string, null)
       labels                     = optional(list(string))
       taints                     = optional(list(string))
       longhorn_volume_size       = optional(number)
@@ -274,11 +276,11 @@ variable "agent_nodepools" {
     error_message = "The key for each individual node in a nodepool must be a stable integer in the range [0, 153] cast as a string."
   }
 
-  #validation {
-  #  condition = sum([for agent_nodepool in var.agent_nodepools : length(coalesce(agent_nodepool.nodes, {})) + coalesce(agent_nodepool.count, 0)]) <= 100
-  #  # 154 because the private ip is derived from tonumber(key) + 101. See private_ipv4 in agents.tf
-  #  error_message = "Hetzner does not support networks with more than 100 servers."
-  #}
+  validation {
+    condition = length(var.agent_nodepools) == 0 ? true : sum([for agent_nodepool in var.agent_nodepools : length(coalesce(agent_nodepool.nodes, {})) + coalesce(agent_nodepool.count, 0)]) <= 100
+    # 154 because the private ip is derived from tonumber(key) + 101. See private_ipv4 in agents.tf
+    error_message = "Hetzner does not support networks with more than 100 servers."
+  }
 
 }
 
@@ -476,6 +478,30 @@ variable "traefik_resource_limits" {
   type        = bool
   default     = true
   description = "Should traefik enable default resource requests and limits. Default values are requests: 100m & 50Mi and limits: 300m & 150Mi."
+}
+
+variable "traefik_resource_values" {
+  type = object({
+    requests = object({
+      cpu    = string
+      memory = string
+    })
+    limits = object({
+      cpu    = string
+      memory = string
+    })
+  })
+  default = {
+    requests = {
+      memory = "50Mi"
+      cpu    = "100m"
+    }
+    limits = {
+      memory = "150Mi"
+      cpu    = "300m"
+    }
+  }
+  description = "Requests and limits for Traefik."
 }
 
 variable "traefik_additional_ports" {
@@ -1137,7 +1163,7 @@ variable "ingress_target_namespace" {
 variable "enable_local_storage" {
   type        = bool
   default     = false
-  description = "Whether to enable or disable k3s local-storage."
+  description = "Whether to enable or disable k3s local-storage. Warning: when enabled, there will be two default storage classes: \"local-path\" and \"hcloud-volumes\"!"
 }
 
 variable "disable_selinux" {
