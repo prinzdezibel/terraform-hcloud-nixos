@@ -8,126 +8,64 @@
   <h2 align="center">Kube-Hetzner</h2>
 
   <p align="center">
-    A highly optimized, easy-to-use, auto-upgradable, HA-default & Load-Balanced, Kubernetes cluster powered by k3s-on-MicroOS and deployed for peanuts on <a href="https://hetzner.com" target="_blank">Hetzner Cloud</a> 🤑
+    A highly optimized, easy-to-use, auto-upgradable, HA-default & Load-Balanced, Kubernetes cluster powered by <strong>k3s-on-NixOS</strong> and deployed for peanuts on <a href="https://hetzner.com" target="_blank">Hetzner Cloud</a> 🤑
   </p>
-  <hr />
-    <p align="center">
-    🔥 Introducing <a href="https://chat.openai.com/g/g-UEqjc2qiW-kh-assistant" target="_blank">KH Assistant</a>, our Custom-GPT kube.tf generator to get you going fast, just tell it what you need! 🚀
-  </p>
-  <hr />
 </p>
 
-## About The Project
+## About terraform-hcloud-nixos
 
-[Hetzner Cloud](https://hetzner.com) is a good cloud provider that offers very affordable prices for cloud instances, with data center locations in both Europe and the US.
+Everything you know and love about the excellent [terraform-hcloud-kube-hetzner](https://github.com/kube-hetzner/terraform-hcloud-kube-hetzner) plus a new optional configuration to use **NixOS as OS** for the k3s cluster instead of openSUSE's MicroOS.
 
-This project aims to create a highly optimized Kubernetes installation that is easy to maintain, secure, and automatically upgrades both the nodes and Kubernetes. We aimed for functionality as close as possible to GKE's Auto-Pilot. _Please note that we are not affiliates of Hetzner, but we do strive to be an optimal solution for deploying and maintaining Kubernetes clusters on Hetzner Cloud._
+## Why another operating system choice?
+Both OS give you the possibility to rollback to a known good state in case of a failure. But they take a different approaches. While MicroOS offers a read-only, immutable root filesystem where updates are applied atomically, NixOS is not strictly read-only, but offers very good build reproducibility and rollback capabilities its through declarative system configurations known as generations.
 
-To achieve this, we built up on the shoulders of giants by choosing [openSUSE MicroOS](https://en.opensuse.org/Portal:MicroOS) as the base operating system and [k3s](https://k3s.io/) as the k8s engine.
+If you find an immutable system too restricted but you still want rollback functionality, you may find NixOS a perfect alternative. Additionally, NixOS provides unparalleled reproducibility. If a system configuration runs on your machine, there's a very good chance it will on any other.
 
-![Product Name Screen Shot][product-screenshot]
+## Limitations
 
-**Why OpenSUSE MicroOS (and not Ubuntu)?**
+There are a currently a few limitations with NixOS, namely:
 
-- Optimized container OS that is fully locked down, most of the filesystem is read-only!
-- Hardened by default with an automatic ban for abusive IPs on SSH for instance.
-- Evergreen release, your node will stay valid forever, as it piggybacks into OpenSUSE Tumbleweed's rolling release!
-- Automatic updates by default and automatic rollbacks if something breaks, thanks to its use of BTRFS snapshots.
-- Supports [Kured](https://github.com/kubereboot/kured) to properly drain and reboot nodes in an HA fashion.
+- Autoscaling is not yet possible
+- Automatic updates of the OS is not implemented yet
+- Automatic updates of the k3s cluster is not implemented yet
+- Filesystem is ext4, not btrfs
+- No swap for now
 
-**Why k3s?**
 
-- Certified Kubernetes Distribution, it is automatically synced to k8s source.
-- Fast deployment, as it is a single binary and can be deployed with a single command.
-- Comes with batteries included, with its in-cluster [helm-controller](https://github.com/k3s-io/helm-controller).
-- Easy automatic updates, via the [system-upgrade-controller](https://github.com/rancher/system-upgrade-controller).
-
-### Features
-
-- [x] **Maintenance-free** with auto-upgrades to the latest version of MicroOS and k3s.
-- [x] **Multi-architecture support**, choose any Hetzner cloud instances, including the cheaper CAX ARM instances.
-- [x] Proper use of the **Hetzner private network** to minimize latency.
-- [x] Choose between **Flannel, Calico, or Cilium** as CNI.
-- [x] Optional **Wireguard** encryption of the Kube network for added security.
-- [x] **Traefik**, **Nginx** or **HAProxy** as ingress controller attached to a Hetzner load balancer with Proxy Protocol turned on.
-- [x] **Automatic HA** with the default setting of three control-plane nodes and two agent nodes.
-- [x] **Autoscaling** nodes via the [kubernetes autoscaler](https://github.com/kubernetes/autoscaler).
-- [x] **Super-HA** with Nodepools for both control-plane and agent nodes that can be in different locations.
-- [x] Possibility to have a **single node cluster** with a proper ingress controller.
-- [x] Can use Klipper as an **on-metal LB** or the **Hetzner LB**.
-- [x] Ability to **add nodes and nodepools** when the cluster is running.
-- [x] Possibility to toggle **Longhorn** and **Hetzner CSI**.
-- [x] Encryption at rest fully functional in both **Longhorn** and **Hetzner CSI**.
-- [x] Optional use of **Floating IPs** for use via Cilium's Egress Gateway.
-- [x] Proper IPv6 support for inbound/outbound traffic.
-- [x] **Flexible configuration options** via variables and an extra Kustomization option.
-
-_It uses Terraform to deploy as it's easy to use, and Hetzner has a great [Hetzner Terraform Provider](https://registry.terraform.io/providers/hetznercloud/hcloud/latest/docs)._
-
-<!-- GETTING STARTED -->
-
-## Getting Started
-
-Follow those simple steps, and your world's cheapest Kubernetes cluster will be up and running.
-
-### ✔️ Prerequisites
-
-First and foremost, you need to have a Hetzner Cloud account. You can sign up for free [here](https://hetzner.com/cloud/).
-
-Then you'll need to have [terraform](https://learn.hashicorp.com/tutorials/terraform/install-cli) or [tofu](https://opentofu.org/docs/intro/install/), [packer](https://developer.hashicorp.com/packer/tutorials/docker-get-started/get-started-install-cli#installing-packer) (for the initial snapshot creation only, no longer needed once that's done), [kubectl](https://kubernetes.io/docs/tasks/tools/) cli and [hcloud](https://github.com/hetznercloud/cli) the Hetzner cli for convenience. The easiest way is to use the [homebrew](https://brew.sh/) package manager to install them (available on Linux, Mac, and Windows Linux Subsystem).
-
-```sh
-brew tap hashicorp/tap
-brew install hashicorp/tap/terraform # OR brew install opentofu
-brew install hashicorp/tap/packer
-brew install kubectl
-brew install hcloud
-```
 
 ### 💡 [Do not skip] Creating your kube.tf file and the OpenSUSE MicroOS snapshot
 
 1. Create a project in your [Hetzner Cloud Console](https://console.hetzner.cloud/), and go to **Security > API Tokens** of that project to grab the API key, it needs to be Read & Write. Take note of the key! ✅
-2. Generate a passphrase-less ed25519 SSH key pair for your cluster; take note of the respective paths of your private and public keys. Or, see our detailed [SSH options](https://github.com/kube-hetzner/terraform-hcloud-kube-hetzner/blob/master/docs/ssh.md). ✅
+2. Generate a passphrase-less ed25519 SSH key pair for your cluster; take note of the respective paths of your private and public keys. Or, see our detailed [SSH options](https://github.com/prinzdezibel/terraform-hcloud-nixos/blob/master/docs/ssh.md). ✅
 3. Now navigate to where you want to have your project live and execute the following command, which will help you get started with a **new folder** along with the required files, and will propose you to create a needed MicroOS snapshot. ✅
 
    ```sh
-   tmp_script=$(mktemp) && curl -sSL -o "${tmp_script}" https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/scripts/create.sh && chmod +x "${tmp_script}" && "${tmp_script}" && rm "${tmp_script}"
+   tmp_script=$(mktemp) && curl -sSL -o "${tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh && chmod +x "${tmp_script}" && "${tmp_script}" && rm "${tmp_script}"
    ```
 
    Or for fish shell:
 
    ```fish
-   set tmp_script (mktemp); curl -sSL -o "{tmp_script}" https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/scripts/create.sh; chmod +x "{tmp_script}"; bash "{tmp_script}"; rm "{tmp_script}"
+   set tmp_script (mktemp); curl -sSL -o "{tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh; chmod +x "{tmp_script}"; bash "{tmp_script}"; rm "{tmp_script}"
    ```
 
    _Optionally, for future usage, save that command as an alias in your shell preferences, like so:_
 
    ```sh
-   alias createkh='tmp_script=$(mktemp) && curl -sSL -o "${tmp_script}" https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/scripts/create.sh && chmod +x "${tmp_script}" && "${tmp_script}" && rm "${tmp_script}"'
+   alias createkh='tmp_script=$(mktemp) && curl -sSL -o "${tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh && chmod +x "${tmp_script}" && "${tmp_script}" && rm "${tmp_script}"'
    ```
 
    Or for fish shell:
 
    ```fish
-   alias createkh='set tmp_script (mktemp); curl -sSL -o "{tmp_script}" https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/scripts/create.sh; chmod +x "{tmp_script}"; bash "{tmp_script}"; rm "{tmp_script}"'
+   alias createkh='set tmp_script (mktemp); curl -sSL -o "{tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh; chmod +x "{tmp_script}"; bash "{tmp_script}"; rm "{tmp_script}"'
    ```
 
-   _For the curious, here is what the script does:_
-
-   ```sh
-   mkdir /path/to/your/new/folder
-   cd /path/to/your/new/folder
-   curl -sL https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/kube.tf.example -o kube.tf
-   curl -sL https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/packer-template/hcloud-microos-snapshots.pkr.hcl -o hcloud-microos-snapshots.pkr.hcl
-   export HCLOUD_TOKEN="your_hcloud_token"
-   packer init hcloud-microos-snapshots.pkr.hcl
-   packer build hcloud-microos-snapshots.pkr.hcl
-   hcloud context create <project-name>
-   ```
+   
 
 4. In that new project folder that gets created, you will find your `kube.tf` and it must be customized to suit your needs. ✅
 
-   _A complete reference of all inputs, outputs, modules etc. can be found in the [terraform.md](https://github.com/kube-hetzner/terraform-hcloud-kube-hetzner/blob/master/docs/terraform.md) file._
+   _A complete reference of all inputs, outputs, modules etc. can be found in the [terraform.md](https://github.com/prinzdezibel/terraform-hcloud-nixos/blob/master/docs/terraform.md) file._
 
 ### 🎯 Installation
 
@@ -140,7 +78,6 @@ terraform validate
 terraform apply -auto-approve
 ```
 
-It will take around 5 minutes to complete, and then you should see a green output confirming a successful deployment.
 
 _Once you start with Terraform, it's best not to change the state of the project manually via the Hetzner UI; otherwise, you may get an error when you try to run terraform again for that cluster (when trying to change the number of nodes for instance). If you want to inspect your Hetzner project, learn to use the hcloud cli._
 

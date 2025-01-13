@@ -47,36 +47,67 @@ fi
 
 # Download the required files only if they don't exist
 if [ ! -e "${folder_path}/kube.tf" ]; then
-    curl -sL https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/kube.tf.example -o "${folder_path}/kube.tf"
+    curl -sL https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/kube.tf.example -o "${folder_path}/kube.tf"
 else
     echo "kube.tf already exists. Skipping download."
 fi
 
 if [ ! -e "${folder_path}/hcloud-microos-snapshots.pkr.hcl" ]; then
-    curl -sL https://raw.githubusercontent.com/kube-hetzner/terraform-hcloud-kube-hetzner/master/packer-template/hcloud-microos-snapshots.pkr.hcl -o "${folder_path}/hcloud-microos-snapshots.pkr.hcl"
+    curl -sL https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/packer-template/hcloud-microos-snapshots.pkr.hcl -o "${folder_path}/hcloud-microos-snapshots.pkr.hcl"
 else
     echo "hcloud-microos-snapshots.pkr.hcl already exists. Skipping download."
+fi
+
+if [ ! -e "${folder_path}/hcloud-nixos-snapshots.pkr.hcl" ]; then
+    curl -sL https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/packer-template/hcloud-nixos-snapshots.pkr.hcl -o "${folder_path}/hcloud-nixos-snapshots.pkr.hcl"
+else
+    echo "hcloud-nixos-snapshots.pkr.hcl already exists. Skipping download."
 fi
 
 # Ask if they want to create the MicroOS snapshots
 if [ -z "${create_snapshots}" ] ; then
     echo " "
-    echo "The snapshots are required and deployed using packer. If you need specific extra packages, you need to choose no and edit hcloud-microos-snapshots.pkr.hcl file manually. This is not needed in 99% of cases, as we already include the most common packages."
+    echo "The snapshots are required and deployed using packer. If you need specific extra packages, you need to choose no and edit hcloud-(microos|nixos)-snapshots.pkr.hcl file manually. This is not needed in 99% of cases, as we already include the most common packages."
     echo " "
-    read -p "Do you want to create the MicroOS snapshots (we create one for x86 and one for ARM architectures) with packer now? (yes/no): " create_snapshots
+    read -p "Do you want to create the MicroOS snapshots (we create one for x86 and one for ARM architectures) with packer now? (yes/no): " create_microos_snapshots
+    echo " "
+    read -p "Do you want to create the NixOS snapshots (we create one for x86 and one for ARM architectures) with packer now? NOTICE: This will result in a world compile. Please give it plenty of time (up to 2 hours). (yes/no): " create_nixos_snapshots
 fi
 
-if [[ "$create_snapshots" =~ ^([Yy]es|[Yy])$ ]]; then
+if [[ "$create_microos_snapshots" =~ ^([Yy]es|[Yy])$ || "$create_nixos_snapshots" =~ ^([Yy]es|[Yy])$  ]]; then
+    if [[ -z "$HCLOUD_TOKEN" ]]; then
+      read -p "Enter your HCLOUD_TOKEN: " hcloud_token
+      export HCLOUD_TOKEN=$hcloud_token
+    fi
+    echo "Running packer init"
+    cd "${folder_path}" && packer init hcloud-microos-snapshots.pkr.hcl
+fi
+
+if [[ "$create_microos_snapshots" =~ ^([Yy]es|[Yy])$ ]]; then
     if [[ -z "$HCLOUD_TOKEN" ]]; then
         read -p "Enter your HCLOUD_TOKEN: " hcloud_token
         export HCLOUD_TOKEN=$hcloud_token
     fi
     echo "Running packer build for hcloud-microos-snapshots.pkr.hcl"
-    cd "${folder_path}" && packer init hcloud-microos-snapshots.pkr.hcl && packer build hcloud-microos-snapshots.pkr.hcl
+    cd "${folder_path}" && packer build hcloud-microos-snapshots.pkr.hcl &
 else
     echo " "
     echo "You can create the snapshots later by running 'packer build hcloud-microos-snapshots.pkr.hcl' in the folder."
 fi
+
+if [[ "$create_nixos_snapshots" =~ ^([Yy]es|[Yy])$ ]]; then
+    if [[ -z "$HCLOUD_TOKEN" ]]; then
+        read -p "Enter your HCLOUD_TOKEN: " hcloud_token
+        export HCLOUD_TOKEN=$hcloud_token
+    fi
+    echo "Running packer build for hcloud-nixos-snapshots.pkr.hcl"
+    cd "${folder_path}" && packer build hcloud-nixos-snapshots.pkr.hcl &
+else
+    echo " "
+    echo "You can create the snapshots later by running 'packer build hcloud-microos-snapshots.pkr.hcl' in the folder."
+fi
+
+wait
 
 # Output commands
 echo " "
