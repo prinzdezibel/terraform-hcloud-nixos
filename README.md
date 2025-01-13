@@ -29,11 +29,11 @@ There are a currently a few limitations with NixOS, namely:
 
 
 
-### 💡 [Do not skip] Creating your kube.tf file and snapshots creation
+### 💡 Creating your kube.tf file and snapshots creation
 
 1. Create a project in your [Hetzner Cloud Console](https://console.hetzner.cloud/), and go to **Security > API Tokens** of that project to grab the API key, it needs to be Read & Write. Take note of the key! ✅
 2. Generate a passphrase-less ed25519 SSH key pair for your cluster; take note of the respective paths of your private and public keys. Or, see our detailed [SSH options](https://github.com/prinzdezibel/terraform-hcloud-nixos/blob/master/docs/ssh.md). ✅
-3. Now navigate to where you want to have your project live and execute the following command, which will help you get started with a **new folder** along with the required files, and will propose you to create a needed MicroOS snapshot. ✅
+3. Now navigate to where you want to have your project live and execute the following command, which will help you get started with a **new folder** along with the required files, and will propose you to create the mandatory snapshots. ✅
 
    ```sh
    tmp_script=$(mktemp) && curl -sSL -o "${tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh && chmod +x "${tmp_script}" && "${tmp_script}" && rm "${tmp_script}"
