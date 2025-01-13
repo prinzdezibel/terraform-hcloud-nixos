@@ -19,13 +19,14 @@ variable "hcloud_token_nixos" {
 # We download the OpenSUSE MicroOS x86 image from an automatically selected mirror.
 variable "nixos_x86_mirror_link" {
   type    = string
-  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.3/nixos-x86_64-linux.qcow2"
+  #default = "http://77.7.69.42/nixos-x86_64-linux.qcow2"
+  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.5/nixos-x86_64-linux.qcow2"
 }
 
 # We download the OpenSUSE MicroOS ARM image from an automatically selected mirror.
 variable "nixos_arm_mirror_link" {
   type    = string
-  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.3/nixos-aarch64-linux.qcow2"
+  default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.5/nixos-aarch64-linux.qcow2"
 }
 
 # If you need to add other packages to the OS, do it here in the default value, like ["vim", "curl", "wget"]
@@ -45,8 +46,11 @@ locals {
     echo 'NixOS image loaded, writing to disk... '
     qemu-img convert -p -f qcow2 -O host_device $(ls -a | grep -ie '^.*qcow2$') /dev/sda
 
+    udevadm settle --timeout=5 --exit-if-exists=/dev/sda1
+    udevadm settle --timeout=5 --exit-if-exists=/dev/sda2
+    
     echo 'Rebooting...'
-    sleep 1 && udevadm settle && reboot
+    reboot
   EOT
 
   rebuild_nixos = <<-EOT
@@ -77,14 +81,15 @@ locals {
     nixos-generate-config
     sed -i "s/.\/hardware-configuration.nix/.\/hardware-configuration.nix\n     .\/modules/" configuration.nix
 
-    echo "Change current UEFI-enabled systemd-boot to GRUB BIOS/GPT setup."
-
-    sed -i 's/# Use the systemd-boot EFI boot loader\.//' configuration.nix
-    
-    # Have kernel images living in EFI partition is problematic, because we don't want to have it bigger than 256MB 
-    sed -i 's/boot.loader.efi.canTouchEfiVariables = true;/boot.loader.efi.canTouchEfiVariables = false;/' configuration.nix
-    sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { enable = true; configurationLimit = 1; device = "\/dev\/sda"; efiSupport = true; efiInstallAsRemovable = true; };\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/efi"; enable = false; } { where = "\/boot"; enable = false; }];/' configuration.nix
     sed -zi 's/fileSystems."\/boot" =.*{.*}.*;/fileSystems."\/boot" = { device = "\/dev\/sda1"; fsType = "vfat"; options = [ "fmask=0022" "dmask=0022" ]; };/' hardware-configuration.nix
+
+#    echo "Change current UEFI-enabled systemd-boot to GRUB BIOS/GPT setup."
+#
+#    sed -i 's/# Use the systemd-boot EFI boot loader\.//' configuration.nix
+#    
+#    # Have kernel images living in EFI partition is problematic, because we don't want to have it bigger than 256MB 
+#    sed -i 's/boot.loader.efi.canTouchEfiVariables = true;/boot.loader.efi.canTouchEfiVariables = false;/' configuration.nix
+#    sed -i 's/boot.loader.systemd-boot.enable = true;/boot.loader.grub = { enable = true; configurationLimit = 1; device = "\/dev\/sda"; efiSupport = true; efiInstallAsRemovable = true; };\nboot.loader.systemd-boot.enable = false;\nsystemd.automounts = [{ where = "\/efi"; enable = false; } { where = "\/boot"; enable = false; }];/' configuration.nix
 
     # Kernel images should live in main partition (works only for GRUB)
     #echo "Unmount /boot ESP"
@@ -120,8 +125,9 @@ source "hcloud" "nixos-x86-snapshot" {
   rescue      = "linux64"
   #location    = "fsn1"
   location     = "hel1"
-  server_type = "ccx13"  # We need a dedicated vCPU, because shared x86_64 vCPU's don't support UEFI boot
-  #server_type = "cx22" # Shared vCPU
+  #server_type = "ccx13"  # We need a dedicated vCPU, because shared x86_64 vCPU's don't support UEFI boot
+  server_type = "cx22" # Intel Shared vCPU
+  #server_type = "cpx11" # AMD Shared vCPU
   snapshot_labels = {
     nixos-snapshot = "yes"
     creator        = "kube-hetzner"
@@ -139,7 +145,7 @@ source "hcloud" "nixos-arm-snapshot" {
   server_type = "cax11"
   snapshot_labels = {
     nixos-snapshot = "yes"
-    creator          = "kube-hetzner"
+    creator        = "kube-hetzner"
   }
   snapshot_name = "NixOS ARM by Kube-Hetzner"
   ssh_username  = "root"
