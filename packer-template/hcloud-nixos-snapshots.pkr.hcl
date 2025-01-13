@@ -123,11 +123,12 @@ EOT
 source "hcloud" "nixos-x86-snapshot" {
   image       = "ubuntu-24.04"
   rescue      = "linux64"
-  #location    = "fsn1"
-  location     = "hel1"
+  location    = "fsn1"
+  #location     = "hel1"
   #server_type = "ccx13"  # We need a dedicated vCPU, because shared x86_64 vCPU's don't support UEFI boot
   server_type = "cx22" # Intel Shared vCPU
   #server_type = "cpx11" # AMD Shared vCPU
+  upgrade_server_type = "cx52" # 16 cores for faster builds
   snapshot_labels = {
     nixos-snapshot = "yes"
     creator        = "kube-hetzner"
@@ -143,6 +144,7 @@ source "hcloud" "nixos-arm-snapshot" {
   rescue      = "linux64"
   location    = "fsn1"
   server_type = "cax11"
+  upgrade_server_type = "cax41" # 16 cores for faster builds
   snapshot_labels = {
     nixos-snapshot = "yes"
     creator        = "kube-hetzner"
