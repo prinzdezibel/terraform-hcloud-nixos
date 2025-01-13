@@ -29,7 +29,7 @@ There are a currently a few limitations with NixOS, namely:
 
 
 
-### 💡 [Do not skip] Creating your kube.tf file and the OpenSUSE MicroOS snapshot
+### 💡 [Do not skip] Creating your kube.tf file and snapshots creation
 
 1. Create a project in your [Hetzner Cloud Console](https://console.hetzner.cloud/), and go to **Security > API Tokens** of that project to grab the API key, it needs to be Read & Write. Take note of the key! ✅
 2. Generate a passphrase-less ed25519 SSH key pair for your cluster; take note of the respective paths of your private and public keys. Or, see our detailed [SSH options](https://github.com/prinzdezibel/terraform-hcloud-nixos/blob/master/docs/ssh.md). ✅
