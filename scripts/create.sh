@@ -74,34 +74,29 @@ if [ -z "${create_snapshots}" ] ; then
     read -p "Do you want to create the NixOS snapshots (we create one for x86 and one for ARM architectures) with packer now? NOTICE: This will result in a world compile. Please give it plenty of time (up to 2 hours). (yes/no): " create_nixos_snapshots
 fi
 
+cd "${folder_path}"
+
 if [[ "$create_microos_snapshots" =~ ^([Yy]es|[Yy])$ || "$create_nixos_snapshots" =~ ^([Yy]es|[Yy])$  ]]; then
     if [[ -z "$HCLOUD_TOKEN" ]]; then
       read -p "Enter your HCLOUD_TOKEN: " hcloud_token
       export HCLOUD_TOKEN=$hcloud_token
     fi
     echo "Running packer init"
-    cd "${folder_path}" && packer init hcloud-microos-snapshots.pkr.hcl
+    packer init hcloud-microos-snapshots.pkr.hcl
+    packer init hcloud-nixos-snapshots.pkr.hcl
 fi
 
 if [[ "$create_microos_snapshots" =~ ^([Yy]es|[Yy])$ ]]; then
-    if [[ -z "$HCLOUD_TOKEN" ]]; then
-        read -p "Enter your HCLOUD_TOKEN: " hcloud_token
-        export HCLOUD_TOKEN=$hcloud_token
-    fi
     echo "Running packer build for hcloud-microos-snapshots.pkr.hcl"
-    cd "${folder_path}" && packer build hcloud-microos-snapshots.pkr.hcl &
+    packer build hcloud-microos-snapshots.pkr.hcl &
 else
     echo " "
     echo "You can create the snapshots later by running 'packer build hcloud-microos-snapshots.pkr.hcl' in the folder."
 fi
 
 if [[ "$create_nixos_snapshots" =~ ^([Yy]es|[Yy])$ ]]; then
-    if [[ -z "$HCLOUD_TOKEN" ]]; then
-        read -p "Enter your HCLOUD_TOKEN: " hcloud_token
-        export HCLOUD_TOKEN=$hcloud_token
-    fi
     echo "Running packer build for hcloud-nixos-snapshots.pkr.hcl"
-    cd "${folder_path}" && packer build hcloud-nixos-snapshots.pkr.hcl &
+    packer build hcloud-nixos-snapshots.pkr.hcl &
 else
     echo " "
     echo "You can create the snapshots later by running 'packer build hcloud-microos-snapshots.pkr.hcl' in the folder."
