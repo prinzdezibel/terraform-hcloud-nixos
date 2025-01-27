@@ -1232,10 +1232,12 @@ EOT
 EOF
 
 nixos_cloudinit_runcmd = <<-EOT
-
+# Dummy command to make cloud-init happy
+true
 
 # Disable rebootmgr service as we use kured instead
 #- [systemctl, disable, '--now', 'rebootmgr.service']
+
 #%{if length(var.dns_servers) > 0}
 ## Set the dns manually
 #- [systemctl, 'reload', 'NetworkManager']
