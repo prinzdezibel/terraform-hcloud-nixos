@@ -4,7 +4,7 @@ variable "name" {
 }
 
 variable "hcloud_server_os" {
-  description = "Specify immutable operating system used for nodes."
+  description = "Specify operating system used for nodes."
   type        = string
 }
 

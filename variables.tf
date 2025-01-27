@@ -35,7 +35,7 @@ variable "ssh_port" {
 }
 
 variable "hcloud_server_os" {
-  description = "Immutable operating system for nodes."
+  description = "Operating system for nodes."
   type        = string
   default     = "MicroOS"
   validation {

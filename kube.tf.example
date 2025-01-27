@@ -54,7 +54,7 @@ module "kube-hetzner" {
   # It is important that exactly this key is passed via `ssh_public_key` & `ssh_private_key` variables.
   # hcloud_ssh_key_id = ""
 
-  # Specifiy immutable operating system for nodes. 
+  # Specify operating system for nodes.
   # Note that NixOS does not support all features yet.
   # Default is "MicroOS"
   hcloud_server_os = "NixOS"
