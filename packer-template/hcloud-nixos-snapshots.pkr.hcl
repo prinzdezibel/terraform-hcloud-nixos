@@ -19,6 +19,7 @@ variable "hcloud_token_nixos" {
 # We download the OpenSUSE MicroOS x86 image from an automatically selected mirror.
 variable "nixos_x86_mirror_link" {
   type    = string
+  #default = "http://5.75.245.244:8080/nixos-x86_64-linux.qcow2"
   default = "https://github.com/prinzdezibel/nixos-qemu-image/releases/download/v0.9.8/nixos-x86_64-linux.qcow2"
 }
 
@@ -168,7 +169,7 @@ source "hcloud" "nixos-arm-snapshot" {
   #location    = "fsn1"
   location    = "hel1"
   server_type = "cax11"
-  upgrade_server_type = "cax51" # 16 cores for faster builds
+  #upgrade_server_type = "cax51" # 16 cores for faster builds
   snapshot_labels = {
     nixos-snapshot = "yes"
     creator        = "kube-hetzner"

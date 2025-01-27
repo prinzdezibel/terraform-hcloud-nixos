@@ -71,7 +71,7 @@ if [ -z "${create_snapshots}" ] ; then
     echo " "
     read -p "Do you want to create the MicroOS snapshots (we create one for x86 and one for ARM architectures) with packer now? (yes/no): " create_microos_snapshots
     echo " "
-    read -p "Do you want to create the NixOS snapshots (we create one for x86 and one for ARM architectures) with packer now? NOTICE: This will result in a world compile. Please give it plenty of time (up to 2 hours). (yes/no): " create_nixos_snapshots
+    read -p "Do you want to create the NixOS snapshots (we create one for x86 and one for ARM architectures) with packer now? (yes/no): " create_nixos_snapshots
 fi
 
 cd "${folder_path}"
