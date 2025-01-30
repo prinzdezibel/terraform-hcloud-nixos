@@ -82,7 +82,6 @@ locals {
       var.disable_hetzner_csi ? [] : ["hcloud-csi.yaml"],
       lookup(local.ingress_controller_install_resources, var.ingress_controller, []),
       lookup(local.cni_install_resources, var.cni_plugin, []),
-      var.enable_longhorn ? ["longhorn.yaml"] : [],
       var.enable_csi_driver_smb ? ["csi-driver-smb.yaml"] : [],
       var.enable_cert_manager || var.enable_rancher ? ["cert_manager.yaml"] : [],
       var.enable_rancher ? ["rancher.yaml"] : [],
@@ -1101,14 +1100,18 @@ nixos_install_k3s = concat(
       exit 1
     fi
 
-    if [ -z "$INIT_CLUSTER" ]; then
-      echo "Variable INIT_CLUSTER is not set."
-      exit 1
-    fi
         
     IPV4_PRIVATE=$(ip addr show dev eth1 | sed -e's/^.*inet \([^ ]*\)\/.*$/\1/;t;d')
     IPV6_PRIVATE=$(ip addr show dev eth1 | sed -e's/^.*inet6 \([^ ]*\)\/.*$/\1/;t;d')
     MAC_PRIVATE=$(cat /sys/class/net/eth1/address)
+
+    if [[ "$ROLE" == "server" && %{if var.allow_scheduling_on_control_plane && (var.enable_longhorn || var.enable_iscsid)}true%{else}false%{endif} ]]; then
+        OPEN_ISCSI_ENABLE=true
+    elif [[ "$ROLE" == "agent" && %{if var.enable_longhorn || var.enable_iscsid}true%{else}false%{endif} ]]; then
+        OPEN_ISCSI_ENABLE=true
+    else
+        OPEN_ISCSI_ENABLE=false
+    fi
 
     cat <<EOF > /etc/nixos/modules/k3s.nix
     {lib, ...}:{
@@ -1119,6 +1122,9 @@ nixos_install_k3s = concat(
         clusterInit = $INIT_CLUSTER;
         configPath = /tmp/config.yaml;
       };
+
+      services.openiscsi.enable = $OPEN_ISCSI_ENABLE;
+      services.openiscsi.name = "iqn.2020-08.org.linux-iscsi.initiatorhost:$(uname -n)";
       
       environment.interactiveShellInit = ''
         alias k=kubectl

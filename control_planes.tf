@@ -269,7 +269,7 @@ resource "null_resource" "nixos_rebuild_control_planes" {
   provisioner "remote-exec" {
     inline = [
       "set -o errexit",
-      "nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix"
+      "nixos-rebuild switch"
     ]
   }
 

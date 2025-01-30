@@ -71,7 +71,7 @@ locals {
       ...
     }:
     {
-      environment.systemPackages = with pkgs; [ k3s ] ++ [ ${join(" ", var.nix_packages_to_install)} ];
+      environment.systemPackages = with pkgs; [ k3s openiscsi ] ++ [ ${join(" ", var.nix_packages_to_install)} ];
     }' > modules/system-packages.nix
 
     # Wipe old kernels

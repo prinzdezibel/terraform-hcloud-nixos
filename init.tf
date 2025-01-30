@@ -105,7 +105,7 @@ resource "null_resource" "rebuild_first_control_plane" {
 }
 
 resource "null_resource" "first_control_plane_start_server" {
-  
+
   connection {
     user           = "root"
     private_key    = var.ssh_private_key
@@ -144,7 +144,7 @@ resource "null_resource" "first_control_plane_start_server" {
     ]
   }
 
-  depends_on = [ null_resource.rebuild_first_control_plane ]
+  depends_on = [null_resource.rebuild_first_control_plane]
 }
 
 
@@ -203,6 +203,11 @@ resource "null_resource" "kustomization" {
   provisioner "file" {
     content     = local.kustomization_backup_yaml
     destination = "/var/post_install/kustomization.yaml"
+  }
+
+  provisioner "file" {
+    content     = templatefile("${path.module}/templates/nixos-fix-longhorn.yaml.tpl", {})
+    destination = "/var/post_install/longhorn_fix_nixos.yaml"
   }
 
   # Upload traefik ingress controller config
@@ -377,7 +382,8 @@ resource "null_resource" "kustomization" {
   # Deploy our post-installation kustomization
   provisioner "remote-exec" {
     inline = concat([
-      "set -ex",
+      "set -e",
+      "sleep 10",
 
       # This ugly hack is here, because terraform serializes the
       # embedded yaml files with "- |2", when there is more than
@@ -388,7 +394,6 @@ resource "null_resource" "kustomization" {
       # due to indendation this should not changes the embedded
       # manifests themselves
       "sed -i 's/^- |[0-9]\\+$/- |/g' /var/post_install/kustomization.yaml",
-
       # Wait for k3s to become ready (we check one more time) because in some edge cases,
       # the cluster had become unvailable for a few seconds, at this very instant.
       <<-EOT
@@ -399,12 +404,36 @@ resource "null_resource" "kustomization" {
         done
       EOF
       EOT
+      ,
+      # Ready, set, go for the kustomization
+      "kubectl apply -k /var/post_install",
       ]
       ,
+      var.hcloud_server_os == "NixOS" && (var.enable_longhorn || var.enable_iscsid) ? [
+        <<-EOT
+          # Workaround for error https://github.com/longhorn/longhorn/issues/2166
+          kubectl_native_wait () {
+            while [ -z "$(kubectl get po -n kyverno|grep kyverno-$${1}-controller|cut -f1 -d ' ')" ]; do
+              sleep 2
+              echo Waiting for kyverno-$${1}-controller...
+            done
+            kubectl wait --namespace kyverno --for=condition=ready pod $(kubectl get po -n kyverno|grep kyverno-$${1}-controller|cut -f1 -d ' ') --timeout=120s
+          }
 
-      [
-        # Ready, set, go for the kustomization
-        "kubectl apply -k /var/post_install",
+          # --server-side=true prevents CustomResourceDefinition.apiextensions.k8s.io "policies.kyverno.io" is invalid: metadata.annotations: Too long: may not be more than 262144 bytes
+          kubectl apply --force-conflicts --server-side=true -f https://github.com/kyverno/kyverno/releases/download/v1.12.0/install.yaml
+          
+          kubectl_native_wait admission
+          kubectl_native_wait background
+          kubectl_native_wait cleanup
+          kubectl_native_wait reports
+          kubectl create ns longhorn-system
+          kubectl apply -f /var/post_install/longhorn_fix_nixos.yaml
+          sleep 7
+        EOT
+      ] : [],
+       [
+        "kubectl apply -f /var/post_install/longhorn.yaml",
         "echo 'Waiting for the system-upgrade-controller deployment to become available...'",
         "kubectl -n system-upgrade wait --for=condition=available --timeout=360s deployment/system-upgrade-controller",
         "sleep 7", # important as the system upgrade controller CRDs sometimes don't get ready right away, especially with Cilium.
