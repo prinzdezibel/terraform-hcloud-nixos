@@ -427,9 +427,8 @@ resource "null_resource" "kustomization" {
           kubectl_native_wait background
           kubectl_native_wait cleanup
           kubectl_native_wait reports
-          kubectl create ns longhorn-system
+          kubectl create namespace longhorn-system --dry-run=client -o yaml | kubectl apply -f -
           kubectl apply -f /var/post_install/longhorn_fix_nixos.yaml
-          sleep 7
         EOT
       ] : [],
        [
