@@ -1120,7 +1120,7 @@ nixos_install_k3s = concat(
         extraFlags = [ "--node-name $(uname -n)" "$SERVER_ARGS" ];
         role = "$ROLE";
         clusterInit = $INIT_CLUSTER;
-        configPath = /tmp/config.yaml;
+        configPath = /etc/rancher/k3s/config.yaml;
       };
 
       services.openiscsi.enable = $OPEN_ISCSI_ENABLE;
