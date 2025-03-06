@@ -85,3 +85,6 @@ You can view all kinds of details about the cluster by running `terraform output
 
 To manage your cluster with `kubectl`, you can either use SSH to connect to a control plane node or connect to the Kube API directly.
 
+## Troubleshooting
+Sometimes `terraform apply` results in an error occurs during execution of Kustomize scripts. I've not been able to figure out the reason, but it is most likely a timing problem. Perhaps the resources are not created yet. Solution is to re-execute `terraform apply`. It should succeed the second time without error.
+
