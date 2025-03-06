@@ -1113,6 +1113,10 @@ nixos_install_k3s = concat(
         OPEN_ISCSI_ENABLE=false
     fi
 
+    # Copy config.yaml temporarily
+    mkdir -p /etc/rancher/k3s
+    cp /tmp/config.yaml /etc/rancher/k3s/config.yaml
+
     cat <<EOF > /etc/nixos/modules/k3s.nix
     {lib, ...}:{
       services.k3s = {
