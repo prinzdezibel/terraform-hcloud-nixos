@@ -206,7 +206,7 @@ build {
 build {
   sources = ["source.hcloud.nixos-arm-snapshot"]
 
-  # Download the MicroOS ARM image
+  # Download the NixOS ARM image
   provisioner "shell" {
     inline = ["${local.download_nixos_image}${var.nixos_arm_mirror_link}"]
     timeout = "30m"

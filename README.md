@@ -10,7 +10,7 @@
 
 ## About terraform-hcloud-nixos
 
-Get most you know and love about the excellent [terraform-hcloud-kube-hetzner](https://github.com/kube-hetzner/terraform-hcloud-kube-hetzner) plus a new optional configuration to use **NixOS** as operating system for the k3s cluster instead of openSUSE's MicroOS.
+Get most of what you know and love about the excellent [terraform-hcloud-kube-hetzner](https://github.com/kube-hetzner/terraform-hcloud-kube-hetzner) plus a new optional configuration to use **NixOS** as operating system for the k3s cluster instead of openSUSE's MicroOS.
 
 ## Why another operating system choice?
 Both OS give you the possibility to rollback to a known good state in case of a failure. But they take a different approach. While MicroOS offers a read-only, immutable root filesystem where updates are applied atomically, NixOS is not strictly read-only, but offers very good build reproducibility and rollback capabilities its through declarative system configurations known as generations.
