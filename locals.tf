@@ -1154,7 +1154,7 @@ nixos_install_k3s = concat(
            "$${IPV6_PRIVATE}/64"
          ];
          routes = [
-           { routeConfig.Gateway = "fe80::1"; }
+           { Gateway = "fe80::1"; }
          ];
       };
 
