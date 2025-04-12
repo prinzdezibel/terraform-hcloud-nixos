@@ -104,12 +104,12 @@ locals {
       advertise-address           = module.control_planes[k].private_ipv4_address
       node-label                  = v.labels
       node-taint                  = v.taints
-      selinux                     = true
       cluster-cidr                = var.cluster_ipv4_cidr
       service-cidr                = var.service_ipv4_cidr
       cluster-dns                 = var.cluster_dns_ipv4
       write-kubeconfig-mode       = "0644" # needed for import into rancher
     },
+    v.selinux == true ? { selinux = true } : {},
     lookup(local.cni_k3s_settings, var.cni_plugin, {}),
     var.use_control_plane_lb ? {
       tls-san = concat([hcloud_load_balancer.control_plane.*.ipv4[0], hcloud_load_balancer_network.control_plane.*.ip[0]], var.additional_tls_sans)

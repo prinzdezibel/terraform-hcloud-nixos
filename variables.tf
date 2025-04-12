@@ -210,6 +210,10 @@ variable "control_plane_nodepools" {
     )
     error_message = "Names in control_plane_nodepools must be unique."
   }
+  validation {
+    condition = alltrue([for control_plane_nodepool in var.control_plane_nodepools : !(control_plane_nodepool.selinux == true && var.disable_selinux == true)])
+    error_message = "Control plane nodepools can't enable selinux if disable_selinux is true."
+  }
 }
 
 variable "agent_nodepools" {
@@ -260,6 +264,20 @@ variable "agent_nodepools" {
       )
     )
     error_message = "Names in agent_nodepools must be unique."
+  }
+
+  validation {
+    condition = alltrue([for agent_nodepool in var.agent_nodepools :
+      !(agent_nodepool.selinux == true && var.disable_selinux == true)
+    ])
+    error_message = "Agent nodepools can't enable selinux if disable_selinux is true."
+  }
+
+  validation {
+    condition = alltrue([for agent_nodepool in var.agent_nodepools :
+      alltrue([for agent_key, agent_node in coalesce(agent_nodepool.nodes, {}) : !(agent_node.selinux == true && var.disable_selinux == true)])
+    ])
+    error_message = "Agent nodes can't enable selinux if disable_selinux is true."
   }
 
   validation {

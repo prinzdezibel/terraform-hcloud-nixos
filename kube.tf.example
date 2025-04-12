@@ -131,6 +131,7 @@ module "kube-hetzner" {
       location    = "fsn1",
       labels      = [],
       taints      = [],
+      selinux     = false,
       count       = 1
       # swap_size   = "2G" # remember to add the suffix, examples: 512M, 1G
       # zram_size   = "2G" # remember to add the suffix, examples: 512M, 1G
@@ -148,6 +149,7 @@ module "kube-hetzner" {
       location    = "nbg1",
       labels      = [],
       taints      = [],
+      selinux     = false,
       count       = 0
 
       # Fine-grained control over placement groups (nodes in the same group are spread over different physical servers, 10 nodes per placement group max):
@@ -162,6 +164,7 @@ module "kube-hetzner" {
       location    = "hel1",
       labels      = [],
       taints      = [],
+      selinux     = false,
       count       = 0
 
       # Fine-grained control over placement groups (nodes in the same group are spread over different physical servers, 10 nodes per placement group max):
@@ -179,6 +182,7 @@ module "kube-hetzner" {
       location    = "fsn1",
       labels      = [],
       taints      = [],
+      selinux     = false,
       count       = 1
       # swap_size   = "2G" # remember to add the suffix, examples: 512M, 1G
       # zram_size   = "2G" # remember to add the suffix, examples: 512M, 1G
@@ -196,6 +200,7 @@ module "kube-hetzner" {
       location    = "nbg1",
       labels      = [],
       taints      = [],
+      selinux     = false,
       count       = 0
 
       # Fine-grained control over placement groups (nodes in the same group are spread over different physical servers, 10 nodes per placement group max):
@@ -213,6 +218,7 @@ module "kube-hetzner" {
         "node.kubernetes.io/server-usage=storage"
       ],
       taints      = [],
+      selinux     = false,
       count       = 0
 
       # In the case of using Longhorn, you can use Hetzner volumes instead of using the node's own storage by specifying a value from 10 to 10240 (in GB)
@@ -241,6 +247,7 @@ module "kube-hetzner" {
       # Optionally associate a reverse DNS entry with the floating IP(s).
       # This is useful in combination with the Egress Gateway feature for hosting certain services in the cluster, such as email servers.
       # floating_ip_rns = "my.domain.com"
+      selinux     = false,
       count = 0
     },
     # Arm based nodes
@@ -250,6 +257,7 @@ module "kube-hetzner" {
       location    = "fsn1",
       labels      = [],
       taints      = [],
+      selinux     = false,
       count       = 0
     },
     # For fine-grained control over the nodes in a node pool, replace the count variable with a nodes map.

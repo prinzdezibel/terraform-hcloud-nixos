@@ -39,27 +39,12 @@ There are a currently a few limitations with NixOS, namely:
    tmp_script=$(mktemp) && curl -sSL -o "${tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh && chmod +x "${tmp_script}" && "${tmp_script}" && rm "${tmp_script}"
    ```
 
-   Or for fish shell:
-
-   ```fish
-   set tmp_script (mktemp); curl -sSL -o "{tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh; chmod +x "{tmp_script}"; bash "{tmp_script}"; rm "{tmp_script}"
-   ```
-
    _Optionally, for future usage, save that command as an alias in your shell preferences, like so:_
 
    ```sh
    alias createkh='tmp_script=$(mktemp) && curl -sSL -o "${tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh && chmod +x "${tmp_script}" && "${tmp_script}" && rm "${tmp_script}"'
    ```
-
-   Or for fish shell:
-
-   ```fish
-   alias createkh='set tmp_script (mktemp); curl -sSL -o "{tmp_script}" https://raw.githubusercontent.com/prinzdezibel/terraform-hcloud-nixos/master/scripts/create.sh; chmod +x "{tmp_script}"; bash "{tmp_script}"; rm "{tmp_script}"'
-   ```
-
-   
-
-4. In that new project folder that gets created, you will find your `kube.tf` and it must be customized to suit your needs. ✅
+4. In that new project folder that gets created, you will find your `kube.tf` and it must be customized to suit your needs. For better reproducibility it is recommend to use the standard configuration first (except for the values hcloud_token, ssh_public_key and ssh_private_key) and then alter values incrementally to make it easier to spot potential erros. ✅
 
    _A complete reference of all inputs, outputs, modules etc. can be found in the [terraform.md](https://github.com/prinzdezibel/terraform-hcloud-nixos/blob/master/docs/terraform.md) file._
 
@@ -86,5 +71,5 @@ You can view all kinds of details about the cluster by running `terraform output
 To manage your cluster with `kubectl`, you can either use SSH to connect to a control plane node or connect to the Kube API directly.
 
 ## Troubleshooting
-Sometimes `terraform apply` results in an error occurs during execution of Kustomize scripts. I've not been able to figure out the reason, but it is most likely a timing problem. Perhaps the resources are not created yet. Solution is to re-execute `terraform apply`. It should succeed the second time without error.
+Sometimes `terraform apply` results in an error during execution of Kustomize scripts. I've not been able to figure out the reason, but it is most likely a timing problem. Perhaps the resources are not created yet. Solution is to re-execute `terraform apply`. It should succeed the second time without error.
 

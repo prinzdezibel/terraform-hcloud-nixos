@@ -56,7 +56,7 @@ locals {
       node-taint    = v.taints
     },
     var.agent_nodes_custom_config,
-    (v.selinux == true ? { selinux = true } : {})
+    v.selinux == true ? { selinux = true } : {}
   ) }
 }
 

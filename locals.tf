@@ -1227,18 +1227,8 @@ EOT
 EOF
 
 nixos_k3s_config_update_script = <<-EOF
-  
-  if [ -f /etc/rancher/k3s/config.yaml ] && cmp -s /tmp/config.yaml $(readlink -f /etc/rancher/k3s/config.yaml); then
-    echo "No update required to the config.yaml file"
-  else
-    echo "Updated registries.yaml"
-    cat <<EOT > /etc/nixos/modules/k3s-config.nix
-    {...}:{
-      environment.etc."rancher/k3s/config.yaml".text = ''$(cat /tmp/config.yaml)'';
-    }
-EOT
-
-  fi
+  mkdir -p /etc/rancher/k3s
+  cp /tmp/config.yaml /etc/rancher/k3s/config.yaml
 EOF
 
 nixos_cloudinit_runcmd = <<-EOT
